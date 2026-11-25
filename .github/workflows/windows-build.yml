@@ -7,10 +7,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  pull-requests: read
+concurrency:
+  group: qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   test-transport:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +32,74 @@ jobs:
           python -m pip install pytest==9.2.0
           python -m pytest tests -q
           python tests/check_transport.py
+          python tests/mutation_transport.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-artifacts/mutation-transport.json
+          if-no-files-found: warn
+          retention-days: 7
+  audit-cppcheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Cppcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          cppcheck --version
+      - name: Analyze all tracked C++ translation units
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 tools/ci/audit_cppcheck.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cppcheck-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+  audit-msvc:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Native MSVC analysis
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python tools/ci/analyze_windows.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msvc-analysis-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+  gate-review:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Require exact-head Codex review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/ci/review_gate.py
   build-x64:
     needs: test-transport
     runs-on: windows-2025-vs2026

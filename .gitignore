@@ -43,3 +43,9 @@
 *.vcxproj.user
 UpgradeLog*.htm
 Backup/
+
+# Offline QA and CI output
+__pycache__/
+.pytest_cache/
+qa-artifacts/
+build-artifact/

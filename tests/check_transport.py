@@ -26,22 +26,34 @@ void Sleep(int n){tick+=n;}
 struct EcOpContext{USHORT ctrlPort,dataPort; UCHAR ecOffset; int ecData;};
 static int writes, reads, attempts, fail_at, ready_after;
 static UCHAR response;
-static bool is_read;
+static bool is_read, stale_pending;
+static int ibf_until;
 HANDLE PawnIoHandleFor(USHORT){return 1;}
 UCHAR g_tvicReadPort(USHORT){return 0;}
 void g_tvicWritePort(USHORT,UCHAR){}
 bool PawnIoExecute(HANDLE,const char* name,const ULONG64* in,DWORD,ULONG64* out,DWORD){
  ++attempts;
  if(attempts==fail_at)return false;
- if(std::strcmp(name,"ioctl_pio_write")==0){++writes;return true;}
- if(in[0]==0x1604){*out=(is_read && writes>=2 && ready_after>=0 && tick>=DWORD(ready_after))?1:0;}
- else{++reads;*out=(ready_after>=0 && tick>=DWORD(ready_after))?response:0x42;}
+ if(std::strcmp(name,"ioctl_pio_write")==0){
+  if(writes==1 && tick<DWORD(ibf_until))return false;
+  ++writes;return true;
+ }
+ if(in[0]==0x1604){
+  if(writes==0 && stale_pending)*out=1;
+  else if(writes==1 && tick<DWORD(ibf_until))*out=2;
+  else *out=(is_read && writes>=2 && ready_after>=0 && tick>=DWORD(ready_after))?1:0;
+ }
+ else{
+  ++reads;
+  if(writes==0 && stale_pending){stale_pending=false;*out=0x42;}
+  else *out=(ready_after>=0 && tick>=DWORD(ready_after))?response:0x42;
+ }
  return true;
 }
 void TraceEcTimeout(const EcOpContext&,int,bool){}
 void TraceEcFailure(const EcOpContext&,int){}
 void reset(bool read,int ready,int fail=0,UCHAR value=0x55){
- writes=reads=attempts=0;tick=0;fail_at=fail;ready_after=ready;response=value;is_read=read;
+ writes=reads=attempts=0;tick=0;fail_at=fail;ready_after=ready;response=value;is_read=read;stale_pending=false;ibf_until=0;
 }
 """
 MAIN = r"""
@@ -63,6 +75,12 @@ int main(){
   reset(true,0,fail);data=0x33;
   check(!ExecuteEcRead(ctx,data) && data==0x33 && attempts==fail,"read transport failure is not success");
  }
+ reset(true,0);stale_pending=true;
+ check(ExecuteEcRead(ctx,data) && (UCHAR)data==0x55 && reads==2,"stale OBF drained before fresh read");
+ reset(true,0,2);stale_pending=true;data=0x33;
+ check(!ExecuteEcRead(ctx,data) && data==0x33 && attempts==2 && writes==0,"failed stale-buffer drain aborts");
+ reset(true,0);ibf_until=30;data=0x33;
+ check(ExecuteEcRead(ctx,data) && (UCHAR)data==0x55 && tick>=30,"wait for command IBF to clear before address");
  reset(false,0);check(ExecuteEcWrite(ctx),"normal write succeeds");
  int write_ops=attempts;
  for(int fail=1;fail<=write_ops;++fail){
@@ -86,6 +104,19 @@ def extract(source, name):
     return source[match.start():end]
 
 
+def build_program(io, access):
+    strict = re.search(r"constexpr bool STRICT_EC_READ_OBF_HANDLING = (true|false);", io)
+    if strict is None:
+        raise SystemExit("missing strict flag")
+    names = ["PortAccess_TryReadByte", "PortAccess_TryWriteByte"] if "PortAccess_TryReadByte(" in access else []
+    names += ["PortAccess_ReadByte", "PortAccess_WriteByte"]
+    functions = [extract(access, name) for name in names]
+    functions += [extract(io, name) for name in ("WaitForAllClear", "WaitForAnySet", "WaitForControllerReady",
+                                                  "SendEcCommandAndAddress", "ExecuteEcRead", "ExecuteEcWrite")]
+    # Source functions call the injected logging stub, not real Windows IO.
+    return "\n".join([PREAMBLE, strict.group(0), *functions, MAIN])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path, nargs="?", default=Path(__file__).resolve().parents[1])
@@ -96,16 +127,7 @@ def main():
     print(f"Testing checkout {head}", flush=True)
     io = (checkout / "fancontrol/portio.cpp").read_text(encoding="utf-8-sig")
     access = (checkout / "fancontrol/portaccess.cpp").read_text(encoding="utf-8-sig")
-    strict = re.search(r"constexpr bool STRICT_EC_READ_OBF_HANDLING = (true|false);", io)
-    if strict is None:
-        raise SystemExit("missing strict flag")
-    names = ["PortAccess_TryReadByte", "PortAccess_TryWriteByte"] if "PortAccess_TryReadByte(" in access else []
-    names += ["PortAccess_ReadByte", "PortAccess_WriteByte"]
-    functions = [extract(access, name) for name in names]
-    functions += [extract(io, name) for name in ("WaitForAllClear", "WaitForAnySet", "WaitForControllerReady",
-                                                  "SendEcCommandAndAddress", "ExecuteEcRead", "ExecuteEcWrite")]
-    # Source functions call the injected logging stub, not real Windows IO.
-    code = "\n".join([PREAMBLE, strict.group(0), *functions, MAIN])
+    code = build_program(io, access)
     with tempfile.TemporaryDirectory() as tmp:
         source = Path(tmp) / "transport.cpp"
         binary = Path(tmp) / "transport"
