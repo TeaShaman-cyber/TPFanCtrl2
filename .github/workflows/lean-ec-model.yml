@@ -1,0 +1,84 @@
+name: EC Lean model
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'research/ec/**'
+      - '.github/workflows/lean-ec-model.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lean-ec-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  elaborate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Elan (math-lab standalone runner)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/elan.tar.gz" \
+            "https://github.com/leanprover/elan/releases/download/v4.2.3/elan-x86_64-unknown-linux-gnu.tar.gz"
+          echo "df0b2b3a439961ffcbb3985214365ffe40f49bc871df04dff268c7d8e21ca8b2  $RUNNER_TEMP/elan.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/elan"
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP/elan"
+          "$RUNNER_TEMP/elan/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Restore exact Lean toolchain
+        id: lean-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.elan/toolchains
+          key: lean-ec-ubuntu24-x64-elan4.2.3-lean4.33.1-v1
+      - name: Install Lean on cache miss
+        if: steps.lean-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          elan toolchain install leanprover/lean4:v4.33.1
+      - name: Select and verify Lean
+        run: |
+          set -euo pipefail
+          elan default leanprover/lean4:v4.33.1
+          lean --version | tee "$RUNNER_TEMP/lean-version.txt"
+          grep -F 'version 4.33.1,' "$RUNNER_TEMP/lean-version.txt"
+          grep -F 'commit 819816b2e0a3bf405af45ae5c7af2491d8f5bee6,' "$RUNNER_TEMP/lean-version.txt"
+      - name: Verify model and reject false canary
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          mkdir -p qa-artifacts
+          git rev-parse HEAD > qa-artifacts/source-sha.txt
+          lean --version > qa-artifacts/lean-version.txt
+          sha256sum research/ec/Authority.lean > qa-artifacts/source.sha256
+          timeout 300 lean research/ec/Authority.lean | tee qa-artifacts/proof.log
+          cp research/ec/Authority.lean "$RUNNER_TEMP/FalseCanary.lean"
+          cat >> "$RUNNER_TEMP/FalseCanary.lean" <<'LEAN'
+          theorem false_strict_decrease_canary :
+              (FanAuthority.correctDown {FanAuthority.seed with lower := 400} 20).output < 400 := by decide
+          LEAN
+          set +e
+          timeout 300 lean "$RUNNER_TEMP/FalseCanary.lean" > qa-artifacts/canary.log 2>&1
+          rc=$?
+          set -e
+          cat qa-artifacts/canary.log
+          test "$rc" = 1
+          grep -E 'error:.*(decide|false)' qa-artifacts/canary.log
+          echo 'PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee qa-artifacts/result.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: lean-ec-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-artifacts/
+          if-no-files-found: error
+          retention-days: 30
