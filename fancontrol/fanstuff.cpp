@@ -513,11 +513,29 @@ bool FANCONTROL::FanSpunUp(void) {
 //-------------------------------------------------------------------------
 //  set fan state via EC
 //-------------------------------------------------------------------------
+// Only the dual-fan selector bit is changed; preserve other EC flags.
+// Callers hold the EC mutex. Single-fan systems need no selector access.
+bool FANCONTROL::SelectFan(char fan) {
+	if (SingleFan)
+		return true;
+	char current;
+	if (!ReadByteFromEC(TP_ECOFFSET_FAN_SWITCH, &current))
+		return false;
+	const char selected = static_cast<char>((static_cast<unsigned char>(current) & 0xfe) | fan);
+	if (current == selected)
+		return true;
+	if (!WriteByteToEC(TP_ECOFFSET_FAN_SWITCH, selected))
+		return false;
+	char observed;
+	return ReadByteFromEC(TP_ECOFFSET_FAN_SWITCH, &observed) &&
+		(static_cast<unsigned char>(observed) & 1) == fan;
+}
+
 bool FANCONTROL::SetFan(const char* source, int fanctrl, bool final) {
 	char obuf[256] = "",
 		 obuf2[256],
 		 datebuf[128];
-	int ok = 0, fan1_ok = 0, fan2_ok = 0;
+	bool ok = false;
 	char* p = obuf;
 
 	if (g_clientMode)
@@ -537,38 +555,43 @@ bool FANCONTROL::SetFan(const char* source, int fanctrl, bool final) {
 		if (!this->LockECAccess()) return false;
 
 		for (int i = 0; i < 5; i++) {
-			// set new fan1 level
-			ok = this->WriteByteToEC(TP_ECOFFSET_FAN_SWITCH, TP_ECVALUE_SELFAN1);
-			ok = this->WriteByteToEC(TP_ECOFFSET_FAN, fanctrl);
+			char fan1 = 0, fan2 = 0;
+			// Single-fan systems do not need a selector write.
+			if (!this->SelectFan(TP_ECVALUE_SELFAN1))
+				break;
+			if (!this->WriteByteToEC(TP_ECOFFSET_FAN, fanctrl))
+				break;
 			::Sleep(100);
-			// verify completion of fan1
-			fan1_ok = this->ReadByteFromEC(TP_ECOFFSET_FAN, &this->State.FanCtrl);
+			if (!this->ReadByteFromEC(TP_ECOFFSET_FAN, &fan1))
+				break;
 			::Sleep(100);
 
 			if (!SingleFan) {
-				// set new fan2 level
-				ok = this->WriteByteToEC(TP_ECOFFSET_FAN_SWITCH, TP_ECVALUE_SELFAN2);
-				ok = this->WriteByteToEC(TP_ECOFFSET_FAN, fanctrl);
+				if (!this->SelectFan(TP_ECVALUE_SELFAN2))
+					break;
+				if (!this->WriteByteToEC(TP_ECOFFSET_FAN, fanctrl))
+					break;
 				::Sleep(100);
-				// verify completion of fan2
-				fan2_ok = this->ReadByteFromEC(TP_ECOFFSET_FAN, &this->State.FanCtrl);
+				if (!this->ReadByteFromEC(TP_ECOFFSET_FAN, &fan2))
+					break;
 				::Sleep(100);
-			}
-			else {
-				fan2_ok = true;
 			}
 
-			if (fan1_ok && fan2_ok) {
+			if (static_cast<unsigned char>(fan1) == fanctrl &&
+				(SingleFan || static_cast<unsigned char>(fan2) == fanctrl)) {
+				this->State.FanCtrl = fan1;
+				ok = true;
 				p += sprintf_s(p, sizeof(obuf) - (p - obuf), "[i=%d] ", i);
 				break;
 			}
 
+			// Retry only a completed transaction with nonmatching readback.
 			::Sleep(250);
 		}
 
 		this->FreeECAccess();
 
-		if (this->State.FanCtrl == fanctrl) {
+		if (ok) {
 			p += sprintf_s(p, sizeof(obuf) - (p - obuf), "OK");
 			ok = true;
 			if (final)
@@ -747,19 +770,19 @@ bool FANCONTROL::ReadEcRaw(FCSTATE* pfcstate) {
 
 	pfcstate->FanCtrl = -1;
 
-	// Status Register
-	if (!ReadByteFromEC(TP_ECOFFSET_FAN, &pfcstate->FanCtrl)) {
-		this->Trace("failed to read status register from EC");
-		return false;
-	}
-
 	//
 	// Fan 1 first
 	//
 
 	// Select 
-	if (!WriteByteToEC(TP_ECOFFSET_FAN_SWITCH, TP_ECVALUE_SELFAN1)) {
+	if (!SelectFan(TP_ECVALUE_SELFAN1)) {
 		this->Trace("failed to select Fan 1 in EC");
+		return false;
+	}
+
+	// Status Register
+	if (!ReadByteFromEC(TP_ECOFFSET_FAN, &pfcstate->FanCtrl)) {
+		this->Trace("failed to read status register from EC");
 		return false;
 	}
 
@@ -779,7 +802,7 @@ bool FANCONTROL::ReadEcRaw(FCSTATE* pfcstate) {
 		//
 		// Fan 2 last
 		//
-		if (!WriteByteToEC(TP_ECOFFSET_FAN_SWITCH, TP_ECVALUE_SELFAN2)) {
+		if (!SelectFan(TP_ECVALUE_SELFAN2)) {
 			this->Trace("failed to select Fan 2 in EC");
 			return false;
 		}

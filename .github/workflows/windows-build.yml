@@ -32,6 +32,7 @@ jobs:
           python -m pip install pytest==9.2.0
           python -m pytest tests -q
           python tests/check_transport.py
+          python tests/check_fan_commands.py
           python tests/mutation_transport.py
       - uses: actions/upload-artifact@v4
         if: always()
