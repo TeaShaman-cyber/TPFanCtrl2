@@ -11,9 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - ea5a3c34c1f000327ed70a2c3c7b68357d1f362a
-          - 212bad981558fd5ff1d4a6850798768cc614a7b4
-          - ea2b009c1c701a8128b3ed538f885a6926b19d67
+          - 637df4d9455a95c9437e0acc98437e88025d782d
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,12 +28,9 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           python tests/check_fan_commands.py
-          if [ "$EXPECTED_SHA" != ea5a3c34c1f000327ed70a2c3c7b68357d1f362a ]; then
-            python tests/check_transport.py
-          fi
-          if [ "$EXPECTED_SHA" = ea2b009c1c701a8128b3ed538f885a6926b19d67 ]; then
-            python tests/check_tach_status.py
-          fi
+          python tests/check_transport.py
+          python tests/check_tach_status.py
+          python tests/check_mutex.py
           git diff --exit-code
   build:
     runs-on: windows-2025-vs2026
@@ -44,9 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - ea5a3c34c1f000327ed70a2c3c7b68357d1f362a
-          - 212bad981558fd5ff1d4a6850798768cc614a7b4
-          - ea2b009c1c701a8128b3ed538f885a6926b19d67
+          - 637df4d9455a95c9437e0acc98437e88025d782d
     steps:
       - uses: actions/checkout@v4
         with:
