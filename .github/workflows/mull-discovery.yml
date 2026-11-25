@@ -29,7 +29,9 @@ jobs:
           sudo apt-get install -y -qq clang-18
           curl -fsSL --retry 3 -o /tmp/mull.deb https://github.com/mull-project/mull/releases/download/0.39.1/Mull-18-0.39.1-LLVM-18.1.3-ubuntu-amd64-24.04.deb
           echo 'e321b42d481c4b5e0652416dde78b5c02bf34751e5bb2719c8fc00a2b7e68928  /tmp/mull.deb' | sha256sum -c -
-          sudo apt-get install -y -qq /tmp/mull.deb
+          curl -fsSL --retry 3 -o /tmp/mull-core.deb https://github.com/mull-project/mull/releases/download/0.39.1/Mull-0.39.1-ubuntu-amd64-24.04.deb
+          echo '5a39de65f8e78b93cc9f15fce7b24583af1dd14d84f5b41baf742cc556149617  /tmp/mull-core.deb' | sha256sum -c -
+          sudo apt-get install -y /tmp/mull-core.deb /tmp/mull.deb
           clang++-18 --version
           mull-runner --version
       - name: Discover transport mutants
