@@ -29,3 +29,20 @@ same pinned Elan, Lean 4.33.1, runner and bounded positive/negative probe.
 No Mathlib or Lake build needed. Exact toolchain cache, no broad restore key;
 proof source is always freshly checked. The negative canary asserts a false
 strict-decrease property and must fail with its expected proof diagnostic.
+
+## Iteration49: conditional return and accumulation
+
+Original table-selected recovery handlers, restart and ramp handlers reach
+stage 11 again with floor retained. Earlier measurement substeps in stages
+7 and 9 are supplied as conditional entry snapshots; timer and peripheral
+services are stubbed. This is not an end-to-end hardware reachability proof.
+At target 3950 and processed feedback 5100, four rounds on a single emulator
+give floor/output 401,402,403,404. Starting at 498 gives 499,500,500,500.
+These are arbitrary PWM command units, not RPM. The abstract recovery round
+is conditional on the observed path, not a total transition relation.
+The counter check in the existing model assumes ordinary reachable counter
+values (0..9), not arbitrary corrupt signed-byte values. No reset path
+outside the examined handlers has been ruled out.
+
+Evidence: local-lab#289, iteration49 logs and scripts on governed exe.dev.
+The original firmware is not included.
