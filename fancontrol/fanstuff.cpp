@@ -316,6 +316,7 @@ bool FANCONTROL::HandleData(void) {
 		::InterlockedIncrement(&shared->stateSeq);
 	}
 
+	const bool reconcile = this->FanCommandPending || (!SingleFan && State.FanCtrl != State.Fan2Ctrl);
 	switch (this->CurrentMode) {
 
 	case 1: // BIOS
@@ -339,7 +340,7 @@ bool FANCONTROL::HandleData(void) {
 			this->Trace(obuf);
 		}
 
-		if (this->FanCommandPending || static_cast<unsigned char>(this->State.FanCtrl) != 0x80)
+		if (reconcile || static_cast<unsigned char>(this->State.FanCtrl) != 0x80)
 			ok = this->SetFan("BIOS", 0x80);
 		break;
 
@@ -389,7 +390,7 @@ bool FANCONTROL::HandleData(void) {
 			if (speedVal == 64 && this->State.FanCtrl != 64 && !this->FanSpunUp())
 				speedVal = 7;
 
-			if (this->FanCommandPending || static_cast<unsigned char>(this->State.FanCtrl) != speedVal)
+			if (reconcile || static_cast<unsigned char>(this->State.FanCtrl) != speedVal)
 				ok = this->SetFan("Manual", speedVal);
 			else
 				ok = true;
@@ -412,10 +413,11 @@ bool FANCONTROL::HandleData(void) {
 void FANCONTROL::SmartControl(void) {
 	char obuf[256] = "";
 	int i, newfanctrl = -1, levelIndex = -1, fanctrl = static_cast<unsigned char>(this->State.FanCtrl);
+	const bool reconcile = this->FanCommandPending || (!SingleFan && State.FanCtrl != State.Fan2Ctrl);
 
 	// no sane reading, e.g. an EC that returns zeros right after resume
 	if (this->MaxTemp <= 0 || this->MaxTemp > 110) {
-		if (this->FanCommandPending || fanctrl != 0x80)
+		if (reconcile || fanctrl != 0x80)
 			this->SetFan("No valid temperature", 0x80);
 		return;
 	}
@@ -475,10 +477,10 @@ void FANCONTROL::SmartControl(void) {
 	// A failed command can leave fan 1 at the requested level while fan 2
 	// is still at the old level. Reconcile the current policy, even in
 	// the hysteresis band; do not retry a superseded mode's target.
-	if (this->FanCommandPending && newfanctrl == -1)
+	if (reconcile && newfanctrl == -1)
 		newfanctrl = fanctrl;
 
-	if (newfanctrl != -1 && (this->FanCommandPending ||
+	if (newfanctrl != -1 && (reconcile ||
 		newfanctrl != static_cast<unsigned char>(this->State.FanCtrl))) {
 		this->SetFan("Smart", newfanctrl);
 	}
@@ -590,6 +592,7 @@ bool FANCONTROL::SetFan(const char* source, int fanctrl, bool final) {
 			if (static_cast<unsigned char>(fan1) == fanctrl &&
 				(SingleFan || static_cast<unsigned char>(fan2) == fanctrl)) {
 				this->State.FanCtrl = fan1;
+				this->State.Fan2Ctrl = fan1;
 				this->FanCommandPending = false;
 				ok = true;
 				p += sprintf_s(p, sizeof(obuf) - (p - obuf), "[i=%d] ", i);
@@ -693,7 +696,7 @@ bool FANCONTROL::SetHdw(const char* source, int hdwctrl, int HdwOffset, int AnyW
 bool FANCONTROL::SampleMatch(FCSTATE* smp1, FCSTATE* smp2) {
 
 	// match for identical fanctrl settings
-	if (smp1->FanCtrl != smp2->FanCtrl) return false;
+	if (smp1->FanCtrl != smp2->FanCtrl || smp1->Fan2Ctrl != smp2->Fan2Ctrl) return false;
 
 	// insert any further match criteria here:
 	// -----------------------
@@ -823,6 +826,11 @@ bool FANCONTROL::ReadEcRaw(FCSTATE* pfcstate) {
 			return false;
 		}
 
+		if (!ReadByteFromEC(TP_ECOFFSET_FAN, &pfcstate->Fan2Ctrl)) {
+			this->Trace("failed to read status register for Fan 2");
+			return false;
+		}
+
 		// Lo
 		if (!ReadByteFromEC(TP_ECOFFSET_FANSPEED, &pfcstate->Fan2SpeedLo)) {
 			this->Trace("failed to read FanSpeedLowByte 2 from EC");
@@ -836,6 +844,7 @@ bool FANCONTROL::ReadEcRaw(FCSTATE* pfcstate) {
 		}
 	}
 	else {
+		pfcstate->Fan2Ctrl = pfcstate->FanCtrl;
 		pfcstate->Fan2SpeedLo = pfcstate->Fan1SpeedLo;
 		pfcstate->Fan2SpeedHi = pfcstate->Fan1SpeedHi;
 	}

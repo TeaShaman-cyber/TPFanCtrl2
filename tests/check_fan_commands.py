@@ -12,6 +12,7 @@ while depth:
     depth+=(source[end]=='{')-(source[end]=='}')
     end+=1
 body+=source[raw:end]
+body+=source[source.index("bool FANCONTROL::SampleMatch("):source.index("bool FANCONTROL::LockECAccess(")]
 body+=source[source.index("void FANCONTROL::SmartControl("):source.index("bool FANCONTROL::FanSpunUp(")]
 if 'bool FANCONTROL::SelectFan(' in source:
     a=source.index('bool FANCONTROL::SelectFan(')
@@ -49,7 +50,7 @@ public:
  bool FanSpunUp(){return true;}
  void SmartControl();
  struct FCSTATE{
-  char FanCtrl=5,Fan1SpeedLo=0,Fan1SpeedHi=0,Fan2SpeedLo=0,Fan2SpeedHi=0,Sensors[12]{};
+  char FanCtrl=5,Fan2Ctrl=5,Fan1SpeedLo=0,Fan1SpeedHi=0,Fan2SpeedLo=0,Fan2SpeedHi=0,Sensors[12]{};
   int SensorAddr[12]{};
   const char* SensorName[12]{};
  } State;
@@ -85,6 +86,7 @@ public:
  bool SelectFan(char);
  bool SetFan(const char*,int,bool=false);
  bool ReadEcRaw(FCSTATE*);
+ bool SampleMatch(FCSTATE*,FCSTATE*);
 };
 """
 main=r"""
@@ -127,6 +129,16 @@ int main(){
   f.SmartLevels[1].hystDown=20; // hold current level inside hysteresis
   f.SmartControl();
   check(failed&&polled&&f.level[0]==7&&f.level[1]==7,"smart reconciles pending command inside hysteresis");}
+ {FANCONTROL f;f.SingleFan=false;f.level[1]=0;
+  bool polled=f.ReadEcRaw(&f.State);f.SmartControl();
+  check(polled&&f.level[0]==5&&f.level[1]==5,"initial dual mismatch reconciled");}
+ {FANCONTROL f;f.SingleFan=false;bool polled=f.ReadEcRaw(&f.State);f.SmartControl();
+  check(polled&&f.levelWrites==0,"matching dual levels need no writes");
+  f.level[1]=0;polled=f.ReadEcRaw(&f.State);f.SmartControl();
+  check(polled&&f.level[1]==5,"external fan2 drift reconciled");}
+ {FANCONTROL f;f.SingleFan=false;FANCONTROL::FCSTATE a,b;
+  bool ok=f.ReadEcRaw(&a);f.level[1]=0;ok=ok&&f.ReadEcRaw(&b);
+  check(ok&&!f.SampleMatch(&a,&b),"sample matching includes second control level");}
  return failures?1:0;
 }
 """

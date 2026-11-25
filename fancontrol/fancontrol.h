@@ -58,6 +58,7 @@ protected:
 	struct FCSTATE {
 
 		char FanCtrl,
+			Fan2Ctrl,
 			Fan1SpeedLo,
 			Fan1SpeedHi,
 			Fan2SpeedLo,
