@@ -3,12 +3,33 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [main, ci/windows-baseline]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  test-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check source and run offline transport tests
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python -m pip install pytest==9.2.0
+          python -m pytest tests -q
+          python tests/check_transport.py
   build-x64:
+    needs: test-transport
     runs-on: windows-2025-vs2026
     timeout-minutes: 15
     steps:

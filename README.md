@@ -126,3 +126,29 @@ Public domain (Unlicense), inherited from upstream. `LpcACPIEC.bin` and
 `fancontrol/pawnio/COPYING`.
 No warranty: this program writes to your embedded controller, use it at
 your own risk.
+
+
+## Research fork: EC transport diagnostic
+
+This fork tracks [local-lab #289](https://github.com/TeaShaman-cyber/local-lab/issues/289)
+and [upstream #2](https://github.com/mews-se/TPFanCtrl2/issues/2).
+The ordinary EC mailbox transport now propagates PawnIO failures, waits for OBF
+and avoids additional port I/O in failure logging. Original upstream commit:
+`3acd20ca52c018f30e3a2d376bbe9bd3d1cb52f8`. Ported from the accepted
+[local-lab #296](https://github.com/TeaShaman-cyber/local-lab/pull/296).
+
+Offline QA (Python 3.11, pytest 9.2.0, g++):
+```
+python -m pytest tests -q
+python tests/check_transport.py
+```
+The tests compile selected actual source functions against fake PawnIO and clock;
+no EC access, driver or Windows execution. CI runs these tests before the x64
+MSBuild and records the exact source commit and file hashes in the artifact.
+
+Diagnostic candidate only: strict OBF compatibility on the ThinkPad LPC window,
+layout retry recovery, higher-level acknowledgement, selector writes, legacy
+extended-sensor wrappers and physical fan response remain unverified.
+TVicPort cannot report per-operation I/O failure. Do not deploy the candidate
+before those remaining safety and hardware checks. Original signed modules are
+unchanged; no driver signing or firmware changes.
