@@ -40,6 +40,34 @@ jobs:
           path: qa-artifacts/mutation-transport.json
           if-no-files-found: warn
           retention-days: 7
+  lint-tooling:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install native formatter and workflow linter
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-format-18
+          clang-format-18 --version
+          curl -fsSL --retry 3 -o /tmp/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint
+          /tmp/actionlint -version
+          /tmp/actionlint -color
+      - name: Inventory inherited C++ formatting
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 tools/ci/audit_format.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: formatting-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 7
   audit-cppcheck:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

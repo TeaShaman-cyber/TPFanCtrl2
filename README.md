@@ -185,3 +185,20 @@ Static diagnostics are a discovery baseline, not automatic proof of defects
 or a clean bill of health; reports do not suppress existing findings.
 Independent whole-code model audit is separate from automated PR diff review.
 No live hardware, upstream publication, or deployment is authorized by CI.
+
+### Native C++ tooling
+
+Clang-Format 18 (`.clang-format`) inventories formatting debt on all tracked
+C++ source/header files without changing the tree. Use it on touched code
+deliberately; existing formatting is a discovery baseline, not a repo-wide
+reformat or a zero-debt gate. Keep include order because Windows headers can
+depend on it. Actionlint checks GitHub workflow definitions. Clang-Tidy uses
+the actual MSBuild/Windows SDK configuration, with analyzer, bugprone and
+performance checks (`.clang-tidy`); its inherited findings are reported,
+not silently suppressed. MSVC /analyze and Cppcheck remain separate checks.
+Heavy tools run on hosted CI, not the developer laptop.
+
+Mull (LLVM-based C++ mutation testing) is a candidate for a separate offline
+test target after the hardware boundary is isolated; it is not yet installed
+or a required gate. Existing curated transport mutations remain mandatory.
+Cloud Codex reviews exact PR heads; optional model audits do not gate CI.

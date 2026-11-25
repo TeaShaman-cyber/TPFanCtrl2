@@ -1,0 +1,5 @@
+Checks: '-*,clang-analyzer-*,bugprone-*,performance-*,cert-err34-c,cert-err58-cpp'
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|[/\\\\])fancontrol[/\\\\]'
+SystemHeaders: false
+FormatStyle: none
