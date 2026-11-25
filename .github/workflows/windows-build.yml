@@ -1,0 +1,29 @@
+name: Windows build
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main, ci/windows-baseline]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-x64:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Build without running the application
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python tools/ci/build_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tpfan-x64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: build-artifact/
+          if-no-files-found: error
+          retention-days: 7
