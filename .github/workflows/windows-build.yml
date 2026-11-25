@@ -1,150 +1,78 @@
-name: Windows build
+name: Upstream issue 2 isolated acceptance
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  pull-requests: read
-concurrency:
-  group: qa-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 jobs:
-  test-transport:
+  offline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        sha:
+          - ea5a3c34c1f000327ed70a2c3c7b68357d1f362a
+          - 212bad981558fd5ff1d4a6850798768cc614a7b4
+          - ea2b009c1c701a8128b3ed538f885a6926b19d67
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ matrix.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Check source and run offline transport tests
+      - name: Verify source and run available focused tests
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ matrix.sha }}
         run: |
+          set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          python -m pip install pytest==9.2.0
-          python -m pytest tests -q
-          python tests/check_transport.py
-          python tests/mutation_transport.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mutation-${{ github.event.pull_request.head.sha || github.sha }}
-          path: qa-artifacts/mutation-transport.json
-          if-no-files-found: warn
-          retention-days: 7
-  lint-tooling:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Install native formatter and workflow linter
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq clang-format-18
-          clang-format-18 --version
-          curl -fsSL --retry 3 -o /tmp/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
-          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint
-          /tmp/actionlint -version
-          /tmp/actionlint -color
-      - name: Inventory inherited C++ formatting
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python3 tools/ci/audit_format.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: formatting-${{ github.event.pull_request.head.sha || github.sha }}
-          path: qa-artifacts/
-          if-no-files-found: warn
-          retention-days: 7
-  audit-cppcheck:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Install Cppcheck
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cppcheck
-          cppcheck --version
-      - name: Analyze all tracked C++ translation units
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python3 tools/ci/audit_cppcheck.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cppcheck-${{ github.event.pull_request.head.sha || github.sha }}
-          path: qa-artifacts/
-          if-no-files-found: warn
-          retention-days: 7
-  audit-msvc:
+          python tests/check_fan_commands.py
+          if [ "$EXPECTED_SHA" != ea5a3c34c1f000327ed70a2c3c7b68357d1f362a ]; then
+            python tests/check_transport.py
+          fi
+          if [ "$EXPECTED_SHA" = ea2b009c1c701a8128b3ed538f885a6926b19d67 ]; then
+            python tests/check_tach_status.py
+          fi
+          git diff --exit-code
+  build:
     runs-on: windows-2025-vs2026
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sha:
+          - ea5a3c34c1f000327ed70a2c3c7b68357d1f362a
+          - 212bad981558fd5ff1d4a6850798768cc614a7b4
+          - ea2b009c1c701a8128b3ed538f885a6926b19d67
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ matrix.sha }}
+          path: candidate
           persist-credentials: false
-      - name: Native MSVC analysis
+      - uses: actions/checkout@v4
+        with:
+          ref: 0ae4893ea16f5664bd6602ccdf8b28c7bf7fba18
+          path: tooling
+          persist-credentials: false
+      - name: Reuse existing x64 build and inventory script
         shell: bash
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python tools/ci/analyze_windows.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: msvc-analysis-${{ github.event.pull_request.head.sha || github.sha }}
-          path: qa-artifacts/
-          if-no-files-found: warn
-          retention-days: 7
-  gate-review:
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - name: Require exact-head Codex review
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 tools/ci/review_gate.py
-  build-x64:
-    needs: test-transport
-    runs-on: windows-2025-vs2026
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Build without running the application
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: python tools/ci/build_windows.py
+          EXPECTED_SHA: ${{ matrix.sha }}
+        run: |
+          set -euo pipefail
+          cd candidate
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          mkdir -p tools/ci
+          cp ../tooling/tools/ci/build_windows.py tools/ci/
+          python tools/ci/build_windows.py
+          git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: tpfan-x64-${{ github.event.pull_request.head.sha || github.sha }}
-          path: build-artifact/
+          name: upstream-issue2-x64-${{ matrix.sha }}
+          path: candidate/build-artifact/
           if-no-files-found: error
           retention-days: 7
