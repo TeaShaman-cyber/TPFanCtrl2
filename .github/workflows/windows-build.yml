@@ -11,7 +11,10 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - b67d24b673a7070917f55343207f3e97d849836c
+          - cb1675125dc282312de1a017493c14f63e5bd050
+          - e32c9b146ea306721499160e9e16f088e08def6b
+          - 39353e58517a7c07e68f40a9eccd85fa1596d701
+          - 7d9d529caed8e91e5d368747fc4c9eb796efa84c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,9 +31,15 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           python tests/check_fan_commands.py
-          python tests/check_transport.py
-          python tests/check_tach_status.py
-          python tests/check_mutex.py
+          if [ "$EXPECTED_SHA" != cb1675125dc282312de1a017493c14f63e5bd050 ]; then
+            python tests/check_transport.py
+          fi
+          if [ "$EXPECTED_SHA" = 39353e58517a7c07e68f40a9eccd85fa1596d701 ] || [ "$EXPECTED_SHA" = 7d9d529caed8e91e5d368747fc4c9eb796efa84c ]; then
+            python tests/check_tach_status.py
+          fi
+          if [ "$EXPECTED_SHA" = 7d9d529caed8e91e5d368747fc4c9eb796efa84c ]; then
+            python tests/check_mutex.py
+          fi
           git diff --exit-code
   build:
     runs-on: windows-2025-vs2026
@@ -39,7 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - b67d24b673a7070917f55343207f3e97d849836c
+          - cb1675125dc282312de1a017493c14f63e5bd050
+          - e32c9b146ea306721499160e9e16f088e08def6b
+          - 39353e58517a7c07e68f40a9eccd85fa1596d701
+          - 7d9d529caed8e91e5d368747fc4c9eb796efa84c
     steps:
       - uses: actions/checkout@v4
         with:
