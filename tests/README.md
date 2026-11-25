@@ -27,3 +27,9 @@ deterministic ownership scenarios including worker exit, dialog-to-worker
 handoff, timeout, failed wait and recursive close. This is a fake WinAPI test,
 not an actual Windows threading or hardware test. Controller readiness
 is still checked by the existing EC transaction path.
+
+The separate close-deadlock fix queues UI traces and drains them on the
+dialog thread. Run python tests/check_trace_thread.py for seven offline
+checks (fake UI ownership, bounded queue, delivery, no duplicate drain).
+File and IPC diagnostics are retained. Windows wait-chain and hardware
+shutdown verification are separate from these tests.

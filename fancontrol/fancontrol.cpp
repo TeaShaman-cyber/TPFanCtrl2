@@ -850,6 +850,7 @@ ULONG FANCONTROL::OnHotKey(WPARAM mp1) {
 //  WM_TIMER handler
 //-------------------------------------------------------------------------
 ULONG FANCONTROL::OnTimer(WPARAM timerId) {
+	this->DrainTrace();
 	// an outside shutdown request, taken through TryClose so the BIOS gets the fan back
 	static HANDLE closeEvent = CreateSharedEvent("Global\\TPFanControl_Close");
 	if (closeEvent && ::WaitForSingleObject(closeEvent, 0) == WAIT_OBJECT_0) {
@@ -1327,6 +1328,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 		this->hThread = 0;
 	}
 
+	this->DrainTrace();
 	ULONG ok = mp1;  // equivalent of "ok = this->ReadEcStatus(&this->State);" via thread
 
 	if (ok) {

@@ -24,6 +24,9 @@
 
 #include "winstuff.h"
 #include "TaskbarTextIcon.h"
+#include <deque>
+#include <mutex>
+#include <string>
 
 constexpr const char* FANCONTROLVERSIONS = "2.7.0 Single Fan";
 constexpr const char* FANCONTROLVERSIOND = "2.7.0 Dual Fan";
@@ -175,6 +178,9 @@ protected:
 	char MenuLabelSM1[32];
 	char MenuLabelSM2[32];
 	HANDLE hThread;
+	const DWORD TraceOwnerThread = ::GetCurrentThreadId();
+	std::mutex TraceQueueMutex;
+	std::deque<std::string> TraceQueue;
 	static constexpr int NUM_PIPES = 8;
 	HANDLE hPipes[NUM_PIPES];
 	HANDLE hLock;
@@ -340,6 +346,7 @@ public:
 	void Trace(const char* text);
 
 	void TraceAppend(const char* line);
+	void DrainTrace();
 
 	bool PollECByte(char offset, char* out, int expected, int timeoutMs);
 };

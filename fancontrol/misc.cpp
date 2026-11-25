@@ -863,7 +863,30 @@ FANCONTROL::Trace(const char* text) {
 		}
 	}
 
-	this->TraceAppend(line);
+	// A worker must never synchronously send a message to the dialog:
+	// TryClose and other dialog paths can be joining that worker.
+	{
+		std::lock_guard<std::mutex> lock(TraceQueueMutex);
+		if (TraceQueue.size() >= 100)
+			TraceQueue.pop_front();
+		TraceQueue.emplace_back(line);
+	}
+	if (::GetCurrentThreadId() == TraceOwnerThread)
+		this->DrainTrace();
+}
+
+void FANCONTROL::DrainTrace() {
+	if (::GetCurrentThreadId() != TraceOwnerThread || !hwndDialog)
+		return;
+
+	std::deque<std::string> pending;
+	{
+		std::lock_guard<std::mutex> lock(TraceQueueMutex);
+		pending.swap(TraceQueue);
+	}
+	// Do not hold the queue lock while making any window calls.
+	for (const auto& line : pending)
+		this->TraceAppend(line.c_str());
 }
 
 //-------------------------------------------------------------------------
@@ -881,7 +904,7 @@ FANCONTROL::TraceAppend(const char* line) {
 	char* p = trace + strlen(trace);
 	int linecount = 0;
 
-	while (p >= trace) {
+	while (p > trace) {
 		if (*p == '\n') {
 			linecount++;
 			if (linecount > 100)
@@ -892,7 +915,7 @@ FANCONTROL::TraceAppend(const char* line) {
 	}
 
 	// redisplay log and scroll to bottom
-	::SetDlgItemText(this->hwndDialog, 9200, p + 1);
+	::SetDlgItemText(this->hwndDialog, 9200, linecount > 100 ? p + 1 : trace);
 	::SendDlgItemMessage(this->hwndDialog, 9200, EM_SETSEL, strlen(trace) - 2, strlen(trace) - 2);
 	::SendDlgItemMessage(this->hwndDialog, 9200, EM_LINESCROLL, 0, 9999);
 }
