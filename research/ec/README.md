@@ -46,3 +46,9 @@ outside the examined handlers has been ruled out.
 
 Evidence: local-lab#289, iteration49 logs and scripts on governed exe.dev.
 The original firmware is not included.
+
+The initialization fragment at 0x18fd4..0x18ff8 calls the upper-bound helper
+(500) and computes the lower bound as 5*500/100=25. Three original instruction
+runs confirm reset from 25,401,500 to 25; the RAM output field is cleared to
+zero and feedback becomes 0xffff. The isolated fragment does not change
+physical MMIO and does not establish when full initialization is triggered.

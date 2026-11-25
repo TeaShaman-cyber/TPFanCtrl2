@@ -127,7 +127,21 @@ theorem repeatedFloor_closed (upper initial n : Nat) (h : initial <= upper) :
 example : (recoveryRound seed).output = 401 := by decide
 example : repeatedFloor 500 401 3 = 404 := by decide
 example : repeatedFloor 500 498 4 = 500 := by decide
-example : repeatedFloor 500 400 100 = 500 := by decide
+example : repeatedFloor 500 400 100 = 500 := by
+  rw [repeatedFloor_closed 500 400 100 (by decide)]
+  decide
+
+-- Local initialization fragment at 18fd4..18ff8. This does not
+-- model MMIO or establish when the full initialization is invoked.
+def initializeBounds (s : State) : State :=
+  { s with lower := 25, upper := 500, output := 0 }
+
+theorem initialization_resets_floor (s : State) :
+    (initializeBounds s).lower = 25 := rfl
+
+example : (initializeBounds {seed with lower := 401}).lower = 25 := by decide
+example : (initializeBounds {seed with lower := 500}).lower = 25 := by decide
+#print axioms initialization_resets_floor
 #print axioms recoveryRound_at_floor
 #print axioms recoveryRound_preserves_floor
 #print axioms recoveryRound_blocks_decrease
