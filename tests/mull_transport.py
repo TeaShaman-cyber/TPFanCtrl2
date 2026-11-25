@@ -48,15 +48,15 @@ def main():
         (out / "mull.log").write_text(log)
         print(log[-6000:], flush=True)
         result.check_returncode()
+        (out / "ec_under_test.hpp").write_text(actual)
         with sqlite3.connect(out / "mull-transport.sqlite") as db:
-            rows = db.execute("SELECT filename, line_number, column_number, mutator, status FROM mutant").fetchall()
+            rows = db.execute("SELECT filename, line_number, column_number, mutator, execution_status FROM mutant").fetchall()
         if not rows or any(Path(row[0]).name != "ec_under_test.hpp" for row in rows):
             raise RuntimeError("empty or out-of-scope mutation inventory")
         counts = {str(status): sum(row[4] == status for row in rows) for status in sorted({row[4] for row in rows})}
         if not counts.get("1"):
             raise RuntimeError("no test-detected mutant failures")
         # Keep source and coordinates after temporary build cleanup; no stubs are mutated.
-        (out / "ec_under_test.hpp").write_text(actual)
         report = {"source_sha": sha, "scope": "extracted EC transport functions only",
                   "extracted_sha256": hashlib.sha256(actual.encode()).hexdigest(),
                   "mutant_count": len(rows), "raw_status_counts": counts,
