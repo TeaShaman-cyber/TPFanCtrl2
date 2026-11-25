@@ -152,3 +152,36 @@ extended-sensor wrappers and physical fan response remain unverified.
 TVicPort cannot report per-operation I/O failure. Do not deploy the candidate
 before those remaining safety and hardware checks. Original signed modules are
 unchanged; no driver signing or firmware changes.
+
+### Inherited-code QA
+
+Our fork follows the Hermes OTel fork's exact-head review practice
+([local-lab #289](https://github.com/TeaShaman-cyber/local-lab/issues/289)):
+offline regression tests and a Windows build, static discovery over all three
+Visual Studio projects, native MSVC analysis of the shipping application, and
+a clean exact-head Codex receipt on ready PRs. CI uses read-only permissions and
+does not launch the executable. The review gate checks the actual bot identity,
+SHA, completion, and explicit absence of unresolved findings, not PR reactions.
+
+```sh
+python -m pytest tests -q
+python tests/check_transport.py
+python tests/mutation_transport.py
+python tools/ci/audit_cppcheck.py
+```
+
+Mutation testing currently covers a **curated nine-mutant transport pilot**,
+not all application logic. Baseline must pass; survivors or failed mutation
+execution fail the curated gate. Compile errors and timeouts are not kills.
+The initial pilot found two surviving mutations; stale OBF and delayed IBF
+tests now detect them. Future mutation expansion must measure coverage rather
+than treat this pilot as a whole-code score.
+
+Cppcheck inventories both main Release configurations and the two legacy
+icon helpers, plus dormant C++ files not in those projects. Missing SDK includes
+and diagnostics remain visible in artifacts. MSVC analysis uses the actual
+Windows SDK and verifies compiler /analyze invocation for the shipping app.
+Static diagnostics are a discovery baseline, not automatic proof of defects
+or a clean bill of health; reports do not suppress existing findings.
+Independent whole-code model audit is separate from automated PR diff review.
+No live hardware, upstream publication, or deployment is authorized by CI.
