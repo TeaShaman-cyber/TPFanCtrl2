@@ -87,4 +87,64 @@ theorem no_unconditional_progress :
 #print axioms conditional_conflict
 #print axioms no_unconditional_progress
 
+/- Conditional recovery round: original handlers in states
+   12 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11. Sample/timer boundaries are
+   supplied by the emulator; no universal scheduler claim. -/
+def recoveryRound (s : State) : State :=
+  let raised := raiseFloor s
+  { raised with stage := 11, misses := 0, output := raised.lower }
+
+theorem recoveryRound_at_floor (s : State) (h : s.lower = s.output) :
+    (recoveryRound s).output = min s.upper (s.output + 1) := by
+  simp [recoveryRound, raiseFloor, h]
+
+theorem recoveryRound_preserves_floor (s : State) (h : s.lower <= s.upper) :
+    s.lower <= (recoveryRound s).lower :=
+  floor_nondecreasing s h
+
+theorem recoveryRound_blocks_decrease (s : State) (d : Nat) :
+    (correctDown (recoveryRound s) d).output = (recoveryRound s).output := by
+  have h : (recoveryRound s).lower <= (recoveryRound s).upper := by
+    exact Nat.min_le_left ..
+  have eq : (recoveryRound s).output = (recoveryRound s).lower := rfl
+  unfold correctDown clamp
+  change min (recoveryRound s).upper (max (recoveryRound s).lower ((recoveryRound s).output - d)) = (recoveryRound s).output
+  rw [eq, Nat.max_eq_left (Nat.sub_le ..), Nat.min_eq_right h]
+
+def repeatedFloor (upper initial : Nat) : Nat → Nat
+  | 0 => initial
+  | n + 1 => min upper (repeatedFloor upper initial n + 1)
+
+theorem repeatedFloor_closed (upper initial n : Nat) (h : initial <= upper) :
+    repeatedFloor upper initial n = min upper (initial + n) := by
+  induction n with
+  | zero => simp [repeatedFloor, Nat.min_eq_right h]
+  | succ n ih =>
+    simp only [repeatedFloor, ih]
+    omega
+
+-- Observed conditional repeats, plus derived saturation.
+example : (recoveryRound seed).output = 401 := by decide
+example : repeatedFloor 500 401 3 = 404 := by decide
+example : repeatedFloor 500 498 4 = 500 := by decide
+example : repeatedFloor 500 400 100 = 500 := by
+  rw [repeatedFloor_closed 500 400 100 (by decide)]
+  decide
+
+-- Local initialization fragment at 18fd4..18ff8. This does not
+-- model MMIO or establish when the full initialization is invoked.
+def initializeBounds (s : State) : State :=
+  { s with lower := 25, upper := 500, output := 0 }
+
+theorem initialization_resets_floor (s : State) :
+    (initializeBounds s).lower = 25 := rfl
+
+example : (initializeBounds {seed with lower := 401}).lower = 25 := by decide
+example : (initializeBounds {seed with lower := 500}).lower = 25 := by decide
+#print axioms initialization_resets_floor
+#print axioms recoveryRound_at_floor
+#print axioms recoveryRound_preserves_floor
+#print axioms recoveryRound_blocks_decrease
+#print axioms repeatedFloor_closed
+
 end FanAuthority
