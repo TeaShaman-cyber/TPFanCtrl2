@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - 637df4d9455a95c9437e0acc98437e88025d782d
+          - b67d24b673a7070917f55343207f3e97d849836c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         sha:
-          - 637df4d9455a95c9437e0acc98437e88025d782d
+          - b67d24b673a7070917f55343207f3e97d849836c
     steps:
       - uses: actions/checkout@v4
         with:
