@@ -233,6 +233,7 @@ protected:
 	bool ReadEcStatus(FCSTATE* pfcstate);
 
 	bool ReadEcRaw(FCSTATE* pfcstate);
+	bool SelectFan(char fan);
 
 	bool HandleData();
 
