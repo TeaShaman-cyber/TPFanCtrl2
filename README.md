@@ -202,3 +202,38 @@ Mull (LLVM-based C++ mutation testing) is a candidate for a separate offline
 test target after the hardware boundary is isolated; it is not yet installed
 or a required gate. Existing curated transport mutations remain mandatory.
 Cloud Codex reviews exact PR heads; optional model audits do not gate CI.
+
+### Experimental Smart observation (fork, no actuator changes)
+
+The Smart thermal policy is under development. The default remains the original
+Smart algorithm. An optional single INI line enables counterfactual logging
+inside the existing Smart engine, not control. Example syntax (synthetic
+parameters, **not** an L14 profile):
+
+```ini
+// SmartShadow=100 3000 10000 2000 85 70 5000 ; 40 2000 80 5000 ; 1 2000 2 3000 3 4000 4 5000
+```
+
+Fields before the first semicolon: RPM hysteresis, rise dwell (ms), fall dwell
+(ms), maximum sample gap (ms), urgent temperature (C), recovery temperature
+(C), recovery dwell (ms). The next section contains temperature/RPM pairs;
+the final section contains consecutive level/RPM pairs. Malformed or duplicate
+configuration disables the observer. No default device parameters are supplied.
+It starts from the observed level (or firmware if uncalibrated), then updates
+only a simulated level. The real fan is always controlled by the original
+algorithm. Logs explicitly distinguish actual and projected levels. Read
+errors, profile/mode changes and resume reset simulation state. Existing EC
+temperatures are not independently verified thermal safety inputs.
+
+Offline replay of the same observer:
+
+```sh
+g++ -std=c++11 -I fancontrol tools/research/replay_smart.cpp -o replay-smart
+./replay-smart '40 60000 120000 31000 85 70 60000 ; 60 3610 80 4132 ; 4 3610 5 4132' < elapsed-ms-temperature.txt
+```
+
+Input is one elapsed nonnegative millisecond value and one Celsius measurement
+per line; output is elapsed milliseconds and projected level (128 = firmware).
+The example is a coarse research replay using 30-second samples, not a live
+configuration. Replayed temperatures are observations of the original
+controller, not predictions of another controller's thermal response.

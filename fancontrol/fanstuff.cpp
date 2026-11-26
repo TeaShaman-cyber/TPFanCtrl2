@@ -314,6 +314,9 @@ bool FANCONTROL::HandleData(void) {
 		::InterlockedIncrement(&shared->stateSeq);
 	}
 
+	if (this->CurrentMode != 2)
+		this->SmartShadow.reset();
+
 	switch (this->CurrentMode) {
 
 	case 1: // BIOS
@@ -342,6 +345,7 @@ bool FANCONTROL::HandleData(void) {
 		break;
 
 	case 2: // Smart
+		this->ObserveSmartShadow();
 		this->SmartControl();
 		break;
 
@@ -407,6 +411,26 @@ bool FANCONTROL::HandleData(void) {
 //-------------------------------------------------------------------------
 //  smart fan control depending on temperature
 //-------------------------------------------------------------------------
+void FANCONTROL::ObserveSmartShadow() {
+	if (!this->SmartShadow.enabled() || g_clientMode || !this->ActiveMode ||
+	    this->isPowerSuspendState || this->restorePending) {
+		this->SmartShadow.reset();
+		return;
+	}
+	// Diagnostic only. MaxTemp is existing EC telemetry, not an independent
+	// safety observation. No action from this observer may reach SetFan.
+	const int observed = static_cast<unsigned char>(this->State.FanCtrl);
+	const auto result = this->SmartShadow.observe(::GetTickCount64(), this->MaxTemp,
+	    observed, this->MaxTemp > 0 && this->MaxTemp <= 110);
+	if (result.action.kind != smart_policy::Kind::Hold) {
+		char message[160];
+		sprintf_s(message, sizeof(message),
+		    "SmartShadow (simulation): EC temp=%d, actual=%d, projected=%d",
+		    this->MaxTemp, observed, result.projected);
+		this->Trace(message);
+	}
+}
+
 void FANCONTROL::SmartControl(void) {
 	char obuf[256] = "";
 	int i, newfanctrl = -1, levelIndex = -1, fanctrl = this->State.FanCtrl;
