@@ -48,6 +48,7 @@ FANCONTROL::ReadConfig(const char* configfile)
 	this->fan2speed = 0;
 
 	this->IndSmartLevel = 0;
+	this->SmartShadow = smart_policy::Shadow{};
 
 	this->LidSmartLevel = 0;
 
@@ -71,6 +72,12 @@ FANCONTROL::ReadConfig(const char* configfile)
 
 			if (buf[0] == '/' || buf[0] == '#' || buf[0] == ';')
 				continue;
+
+			if (_strnicmp(buf, "SmartShadow=", 12) == 0) {
+				if (!this->SmartShadow.configure(buf + 12))
+					this->Trace("SmartShadow: invalid or duplicate configuration, disabled");
+				continue;
+			}
 
 			if (_strnicmp(buf, "UseTWR=", 7) == 0) {
 				this->UseTWR = atoi(buf + 7);

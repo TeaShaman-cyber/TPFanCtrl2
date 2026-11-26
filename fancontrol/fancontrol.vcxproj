@@ -280,6 +280,8 @@
     <ClInclude Include="portaccess.h" />
     <ClInclude Include="res\resource.h" />
     <ClInclude Include="sharedstate.h" />
+    <ClInclude Include="smart_policy.h" />
+    <ClInclude Include="smart_shadow.h" />
     <ClInclude Include="SystemTraySDK.h" />
     <ClInclude Include="TaskbarTextIcon.h" />
     <ClInclude Include="tools.h" />

@@ -765,6 +765,7 @@ ULONG FANCONTROL::DlgProc(HWND hwnd, ULONG msg, WPARAM mp1, LPARAM mp2) {
 		return OnNewData(mp1);
 
 	case WM__S0EXIT:
+		this->SmartShadow.reset();
 		this->isModernS0State = false;
 		this->Trace("Detected Modern S0 Exit");
 		this->ScheduleRestore();
@@ -1233,6 +1234,8 @@ void FANCONTROL::ScheduleRestore() {
 //  WM_POWERBROADCAST handler
 //-------------------------------------------------------------------------
 ULONG FANCONTROL::OnPowerBroadcast(WPARAM mp1, LPARAM mp2) {
+	if (mp1 == PBT_APMSUSPEND || mp1 == PBT_APMRESUMEAUTOMATIC)
+		this->SmartShadow.reset();
 	if (mp1 == PBT_APMSUSPEND) {
 		this->isPowerSuspendState = true;
 		this->restorePending = false;
@@ -1357,6 +1360,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 		}
 	}
 	else {
+		this->SmartShadow.reset();
 		char buf[1024];
 		sprintf_s(buf, sizeof(buf), "Warning: can't read Status, read error count = %d", this->ReadErrorCount);
 		this->Trace(buf);
@@ -1538,6 +1542,7 @@ bool FANCONTROL::TryClose() {
 //  switch to smart level 0 (SM1) or 1 (SM2), with logging
 //-------------------------------------------------------------------------
 void FANCONTROL::SwitchSmartLevel(int level) {
+	this->SmartShadow.reset();
 	this->ModeToDialog(2);
 
 	// the profile tables live in the engine, a client only names the one it wants

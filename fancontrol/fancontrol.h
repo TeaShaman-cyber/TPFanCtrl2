@@ -24,6 +24,7 @@
 
 #include "winstuff.h"
 #include "TaskbarTextIcon.h"
+#include "smart_shadow.h"
 
 constexpr const char* FANCONTROLVERSIONS = "2.7.0 Single Fan";
 constexpr const char* FANCONTROLVERSIOND = "2.7.0 Dual Fan";
@@ -236,6 +237,8 @@ protected:
 
 	bool HandleData();
 
+	smart_policy::Shadow SmartShadow;
+	void ObserveSmartShadow();
 	void SmartControl();
 
 	bool FanSpunUp();
