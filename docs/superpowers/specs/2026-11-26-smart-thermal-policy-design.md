@@ -73,4 +73,8 @@ user mode. Preserve the user's active selection during development.
    publication authorization. Keep working installed binary until candidate
    acceptance.
 
-This is the proposed design, not an implemented or deployed controller.
+First offline implementation: see the core plan and fancontrol/smart_policy.h.
+The decision core is not wired to the shipping application. Integration and
+hardware acceptance remain separate. Additional objective: reduce needless
+fan revolutions and airflow exposure as wear/dust proxies; neither is a
+validated bearing-lifetime or dust-accumulation model.
