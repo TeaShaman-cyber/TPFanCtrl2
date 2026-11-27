@@ -75,6 +75,28 @@ jobs:
           test "$rc" = 1
           grep -E 'error:.*(decide|false)' qa-artifacts/canary.log
           echo 'PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee qa-artifacts/result.txt
+      - name: Verify deterministic P-code lift and false canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/ec/lift
+          python3 -m unittest -v test_lift
+          python3 lift.py clamp.pcode oracle.tsv > "$RUNNER_TEMP/LiftedClamp.lean"
+          cmp LiftedClamp.lean "$RUNNER_TEMP/LiftedClamp.lean"
+          sha256sum clamp.pcode lift.py oracle.tsv LiftedClamp.lean > ../../../qa-artifacts/lift.sha256
+          timeout 300 lean LiftedClamp.lean | tee ../../../qa-artifacts/lift-proof.log
+          cp LiftedClamp.lean "$RUNNER_TEMP/LiftFalseCanary.lean"
+          cat >> "$RUNNER_TEMP/LiftFalseCanary.lean" <<'LEAN'
+          theorem false_lift_canary : R17Lift.lifted 25 500 400 0 = 25 := by decide
+          LEAN
+          set +e
+          timeout 300 lean "$RUNNER_TEMP/LiftFalseCanary.lean" > ../../../qa-artifacts/lift-canary.log 2>&1
+          rc=$?
+          set -e
+          cat ../../../qa-artifacts/lift-canary.log
+          test "$rc" = 1
+          grep -E 'error:.*(decide|false)' ../../../qa-artifacts/lift-canary.log
+          echo 'LIFT_PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee ../../../qa-artifacts/lift-result.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
