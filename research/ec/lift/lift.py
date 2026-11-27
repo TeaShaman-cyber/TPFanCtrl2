@@ -187,7 +187,7 @@ def lift(src, kind="clamp"):
             e=boolean(f"(!{truth(a[0])})")
         else: raise LiftError("unsupported operation "+name)
         if (sample or decay) and e.known is None:
-            serial+=1;name=f"v{serial}"
+            serial+=1;name=f"{'_v' if decay else 'v'}{serial}"
             put(env,out,E(e.size,name))
             return f"(let {name} : BitVec {e.size*8} := {e.lean}; {step(pc,idx+1,env,memory,writes,active)})"
         put(env,out,e)
@@ -261,7 +261,8 @@ theorem progress_on_eligible_sample (stage sub misses : BitVec 8)
     lifted stage sub misses lower upper output request target rpm r0 psr = lower - 1 := by
   rw [exact_decay]
   unfold enabled at h
-  simp [spec, h]
+  unfold spec
+  exact if_pos h
 
 -- A single high but non-sentinel value is sufficient; physical validity is external.
 theorem high_reading_counterexample : lifted 11 0 0 500 500 500 499 2550 65534 0 0 = 499 := by decide
@@ -408,7 +409,7 @@ def with_oracle(src, rows, kind="clamp"):
             require(all(int(x)<=255 for x in a[:3]),"decay byte width")
             examples.append("example : lifted "+" ".join(a[:-1])+" = "+a[-1]+" := by decide")
         require(len(examples)==512,"incomplete decay oracle")
-        return out.replace("end R17Decay","\\n".join(examples)+"\\nend R17Decay")
+        return out.replace("end R17Decay","\n".join(examples)+"\nend R17Decay")
     for line in rows.splitlines():
         a=line.split()
         require(len(a)==5 and all(x.isdecimal() and 0<=int(x)<=65535 for x in a),"invalid oracle row")
