@@ -77,3 +77,12 @@ Ordinary valid RPM >=300 clears misses; 0..299 recovers immediately.
 The prior Nat abstraction in Authority.lean is only accurate for normal
 reachable counts; do not generalize its unsigned comparison to arbitrary
 byte state. CI separately verifies the translated decision and all examples.
+
+Conditional composition: Compose.lean uses all three generated models, rather
+than repeating the manually transcribed functions. CI verifies that eight or
+fewer misses and valid RPM preserve the floor in the composed decision/update,
+while the ninth miss at current output 500 sets floor 500 and any subsequent
+clamp returns 500. This composes the slices under the explicit assumption
+that the EC scheduler dispatches recovery after the decision and invokes
+clamp subsequently, without an intervening change of bounds. It does not
+prove scheduler reachability or entire machine behavior.

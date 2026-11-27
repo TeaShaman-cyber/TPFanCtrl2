@@ -128,6 +128,22 @@ jobs:
           test "$rc" = 1
           grep -E 'error:.*(decide|false)' ../../../qa-artifacts/lift-canary.log
           echo 'LIFT_PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee ../../../qa-artifacts/lift-result.txt
+      - name: Verify conditional composition
+        if: matrix.slice == 'sample'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/ec/lift
+          {
+            echo 'import Std.Tactic.BVDecide'
+            for f in LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean; do
+              sed '1d; /^example : lifted /d' "$f"
+            done
+            cat Compose.lean
+          } > "$RUNNER_TEMP/Composition.lean"
+          sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean Compose.lean > ../../../qa-artifacts/composition.sha256
+          timeout 300 lean "$RUNNER_TEMP/Composition.lean" | tee ../../../qa-artifacts/composition.log
+          echo COMPOSITION_PROOF_ACCEPTED | tee ../../../qa-artifacts/composition-result.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
