@@ -146,3 +146,37 @@ CorrectionDomain.lean projects only SUBW and signed direction, not lookup
 table or scheduler. Its universal proofs use bv_decide; direct examples
 use decide. Remaining 19d6c candidate needs separate branch/effect replay.
 No real electrical reachability, firmware patch, or deployment.
+
+## File-driven Wolfram reachability witness (iteration 167)
+
+Reuse the math-research-lab MCPorter transport rather than a new service.
+Node 24.20.0 and MCPorter 0.13.8; package.json, package-lock.json and
+config.ci.json at math-research-lab revision 28069cb46c880e0c4d85b9552a715dd83742883d
+were independently compared with the exe.dev copies. Lock SHA-256
+37e45e866983d84689b1d1a44d40736cf7330dcb95d8eb82d1125f1ef9a09750.
+Node Linux x64 tar.gz SHA-256
+855d581f8a4eb1a8117e3426de25fe02770592febcfb31369aee1ffbfee9e8ec
+is the existing cookbook pin. No system Node replacement.
+
+The exe.dev installation is scoped to
+~/workdata/local-lab-289-bios/tools/iteration167 (not a Git artifact).
+Rebuild from those pinned package/config files using npm ci --ignore-scripts
+--no-audit --no-fund with the pinned Node on PATH. Run from this directory:
+
+    d="$HOME/workdata/local-lab-289-bios/tools/iteration167"
+    export PATH="$d/runtime/node-v24.20.0-linux-x64/bin:$PATH"
+    python3 wolfram_witness.py reachability-example.json \
+      --mcporter "$d/mcp/node_modules/.bin/mcporter" \
+      --config "$d/mcp/config.ci.json" \
+      --out "$d/witness-new"
+
+Output directory must not exist. The wrapper validates integer graph inputs,
+renders Wolfram Language from the same graph as the independent local BFS,
+uses the file-driven code=@file call, preserves exact source and output
+hashes, and returns MATCH (0), MISMATCH (1), or DEGRADED (2).
+CI tests the deterministic adapter offline; external computation is advisory
+and explicitly invoked, not a required network-dependent CI gate.
+Graph sample is the conditional 22-state abstraction of iteration166;
+the reset edge represents full initialization and subsequent return, not a
+proven enabled action from every firmware state. A match certifies agreement
+on graph calculations only, not correspondence to the entire EC.

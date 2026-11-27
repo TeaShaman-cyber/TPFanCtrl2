@@ -177,7 +177,7 @@ jobs:
         run: |
           set -euo pipefail
           cd research/ec/lift
-          python3 -m unittest -v test_audit test_lift
+          python3 -m unittest -v test_audit test_lift test_wolfram_witness
           python3 audit.py fan-audit.pcode > "$RUNNER_TEMP/audit.tsv"
           cmp audit.tsv "$RUNNER_TEMP/audit.tsv"
           sha256sum audit.py test_audit.py fan-audit.pcode audit.tsv CorrectionDomain.lean correction.tsv ExtractFanAudit.java R17CorrectionAudit.java > ../../../qa-artifacts/audit.sha256
