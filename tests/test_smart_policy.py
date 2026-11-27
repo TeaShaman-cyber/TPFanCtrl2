@@ -319,6 +319,7 @@ int main(){
 def test_msr_reader_ages_from_start_and_rejects_multiple_groups():
     root=Path(__file__).resolve().parents[1]
     source=(root/"fancontrol/cpu_msr_win.h").read_text()
-    assert "GetActiveProcessorGroupCount()!=1" in source
+    assert 'GetProcAddress(kernel,"GetActiveProcessorGroupCount")' in source
+    assert "if(!group_count || group_count()!=1)return false;" in source
     assert "frame.time_ms=start;" in source
     assert "GetTickCount64()-start>250" in source

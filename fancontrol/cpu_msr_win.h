@@ -22,7 +22,13 @@ public:
     }
     bool open(const wchar_t* file) {
         close();
-        if(GetActiveProcessorGroupCount()!=1)return false;
+        // Keep the application's legacy Windows target. MSR telemetry is
+        // optional and fails closed when processor-group APIs are absent.
+        using GroupCount = WORD (WINAPI*)();
+        const auto kernel = GetModuleHandleW(L"kernel32.dll");
+        const auto group_count = kernel ? reinterpret_cast<GroupCount>(
+            GetProcAddress(kernel,"GetActiveProcessorGroupCount")) : nullptr;
+        if(!group_count || group_count()!=1)return false;
         int cp[4]{};
         __cpuid(cp,0);
         if (cp[0]<6 || cp[1]!=0x756e6547 || cp[3]!=0x49656e69 || cp[2]!=0x6c65746e) return false;
