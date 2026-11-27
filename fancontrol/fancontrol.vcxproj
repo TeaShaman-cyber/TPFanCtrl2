@@ -280,6 +280,12 @@
     <ClInclude Include="portaccess.h" />
     <ClInclude Include="res\resource.h" />
     <ClInclude Include="sharedstate.h" />
+    <ClInclude Include="nvme_thermal.h" />
+    <ClInclude Include="nvme_monitor.h" />
+    <ClInclude Include="cpu_msr.h" />
+    <ClInclude Include="cpu_msr_win.h" />
+    <ClInclude Include="smart_policy.h" />
+    <ClInclude Include="smart_shadow.h" />
     <ClInclude Include="SystemTraySDK.h" />
     <ClInclude Include="TaskbarTextIcon.h" />
     <ClInclude Include="tools.h" />

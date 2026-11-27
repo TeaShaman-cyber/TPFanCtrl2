@@ -1,0 +1,64 @@
+name: Smart and NVMe isolated acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source and run available focused tests
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python -m pip install pytest==9.2.0
+          python -m pytest tests -q
+          python tests/check_fan_commands.py
+          python tests/check_transport.py
+          python tests/check_tach_status.py
+          python tests/check_mutex.py
+          python tests/check_trace_thread.py
+          git diff --exit-code
+  build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 0ae4893ea16f5664bd6602ccdf8b28c7bf7fba18
+          path: tooling
+          persist-credentials: false
+      - name: Reuse existing x64 build and inventory script
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd candidate
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          mkdir -p tools/ci
+          cp ../tooling/tools/ci/build_windows.py tools/ci/
+          python tools/ci/build_windows.py
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-nvme-x64-${{ github.sha }}
+          path: candidate/build-artifact/
+          if-no-files-found: error
+          retention-days: 7

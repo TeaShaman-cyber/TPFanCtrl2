@@ -757,14 +757,19 @@ ULONG FANCONTROL::DlgProc(HWND hwnd, ULONG msg, WPARAM mp1, LPARAM mp2) {
 		// a client has no port access, so it hands the change to the engine
 		if (g_clientMode)
 			this->SendCommand(-1);
-		else if (!this->hThread && !this->FinalSeen)
+		else if (!this->hThread && !this->FinalSeen) {
+			this->CpuPollEpoch = this->CpuEpoch;
 			this->hThread = this->CreateThread(FANCONTROL_Thread, this);
+		}
 		break;
 
 	case WM__NEWDATA:
 		return OnNewData(mp1);
 
 	case WM__S0EXIT:
+		this->NvmeMonitor.invalidate();
+		++this->CpuEpoch;
+		this->SmartShadow.reset();
 		this->isModernS0State = false;
 		this->Trace("Detected Modern S0 Exit");
 		this->ScheduleRestore();
@@ -883,18 +888,22 @@ ULONG FANCONTROL::OnTimer(WPARAM timerId) {
 			::PostMessage(this->hwndDialog, WM__GETDATA, 0, 0);
 		}
 
+		this->UpdateNvmeMonitor();
+		char title[128], tip[128];
+		this->NvmeTitle(this->Title, title, sizeof(title));
+		this->NvmeTitle(this->Title2, tip, sizeof(tip));
 		ULONG res = this->IsMinimized();
-		if (res && strcmp(this->LastTitle, this->Title2) != 0) {
-			strcpy_s(this->LastTitle, sizeof(this->LastTitle), this->Title2);
+		if (res && strcmp(this->LastTitle, tip) != 0) {
+			strcpy_s(this->LastTitle, sizeof(this->LastTitle), tip);
 		}
-		else if (!res && strcmp(this->LastTitle, this->Title) != 0) {
-			::SetWindowText(this->hwndDialog, this->Title);
-			strcpy_s(this->LastTitle, sizeof(this->LastTitle), this->Title);
+		else if (!res && strcmp(this->LastTitle, title) != 0) {
+			::SetWindowText(this->hwndDialog, title);
+			strcpy_s(this->LastTitle, sizeof(this->LastTitle), title);
 		}
 
 		if (this->pTaskbarIcon) {
-			this->pTaskbarIcon->SetTooltip(this->Title2);
-			strcpy_s(this->LastTooltip, sizeof(this->LastTooltip), this->Title2);
+			this->pTaskbarIcon->SetTooltip(tip);
+			strcpy_s(this->LastTooltip, sizeof(this->LastTooltip), tip);
 			int icon = -1;
 
 			if (this->CurrentModeFromDialog() == 1) {
@@ -1234,6 +1243,11 @@ void FANCONTROL::ScheduleRestore() {
 //  WM_POWERBROADCAST handler
 //-------------------------------------------------------------------------
 ULONG FANCONTROL::OnPowerBroadcast(WPARAM mp1, LPARAM mp2) {
+	if (mp1 == PBT_APMSUSPEND || mp1 == PBT_APMRESUMEAUTOMATIC) {
+		this->NvmeMonitor.invalidate();
+		++this->CpuEpoch;
+		this->SmartShadow.reset();
+	}
 	if (mp1 == PBT_APMSUSPEND) {
 		this->isPowerSuspendState = true;
 		this->restorePending = false;
@@ -1359,6 +1373,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 		}
 	}
 	else {
+		this->SmartShadow.reset();
 		char buf[1024];
 		if (!g_clientMode)
 			SharedState_MarkTachStale();
@@ -1546,6 +1561,7 @@ bool FANCONTROL::TryClose() {
 //  switch to smart level 0 (SM1) or 1 (SM2), with logging
 //-------------------------------------------------------------------------
 void FANCONTROL::SwitchSmartLevel(int level) {
+	this->SmartShadow.reset();
 	this->ModeToDialog(2);
 
 	// the profile tables live in the engine, a client only names the one it wants
@@ -1759,6 +1775,25 @@ FANCONTROL::UpdateTempDisplay(void)
 //-------------------------------------------------------------------------
 int FANCONTROL::WorkThread() {
 	int ok = this->ReadEcStatus(&this->State);
+	// Separate signed MSR module; no EC mutex is held here.
+	// The observer is opt-in and never changes fan ownership.
+	this->CpuMsrFrame = cpu_msr::Frame{};
+	if (this->SmartMsrShadow && this->SmartShadow.enabled()) {
+		if (this->CpuWorkerEpoch != this->CpuPollEpoch) {
+			this->CpuMsr.close();
+			this->CpuMsrAttempted = false;
+			this->CpuWorkerEpoch = this->CpuPollEpoch;
+		}
+		if (!ok) {
+			this->CpuMsr.reset_energy();
+		} else {
+			if (!this->CpuMsrAttempted) {
+				this->CpuMsrAttempted = true;
+				this->CpuMsr.open(L"IntelMSR.bin");
+			}
+			this->CpuMsrFrame = this->CpuMsr.sample();
+		}
+	}
 
 	::PostMessage(this->hwndDialog, WM__NEWDATA, ok, 0);
 
@@ -1819,7 +1854,9 @@ void FANCONTROL::ProcessTextIcons(void) {
 
 	this->iFarbeIconB = icon;
 
-	if (lstrcpyn(myszTip, this->Title2, sizeof(myszTip) - 1) == NULL) {
+	char tip[128];
+	this->NvmeTitle(this->Title2, tip, sizeof(tip));
+	if (lstrcpyn(myszTip, tip, sizeof(myszTip) - 1) == NULL) {
 		myszTip[0] = '\0';
 	}
 
@@ -1878,6 +1915,50 @@ void FANCONTROL::ProcessTextIcons(void) {
 		}
 		pTextIconMutex->Unlock();
 		//this->Trace(LastTooltip); 
+	}
+}
+
+void FANCONTROL::NvmeTitle(const char* base, char* result, size_t size) const {
+	if (this->NvmeStatus[0])
+		_snprintf_s(result, size, _TRUNCATE, "%s | %s", this->NvmeStatus, base);
+	else
+		_snprintf_s(result, size, _TRUNCATE, "%s", base);
+}
+
+void FANCONTROL::UpdateNvmeMonitor() {
+	// The interactive tray/client observes the disk itself. No engine IPC
+	// extension, storage query on the EC worker, or fan-control authority.
+	DWORD session=0;
+	if (!this->NvmeMonitorEnabled ||
+	    !ProcessIdToSessionId(GetCurrentProcessId(), &session) || !session) {
+		this->NvmeStatus[0]=0;
+		return;
+	}
+	const auto now=GetTickCount64();
+	const bool updated=!this->isPowerSuspendState && this->NvmeMonitor.poll(now);
+	const auto n=this->NvmeMonitor.current(now);
+	using smart_policy::ThermalState;
+	const char* label=n.state==ThermalState::Critical?"CRITICAL":
+		n.state==ThermalState::Warning?"WARNING":n.state==ThermalState::Normal?"OK":"unknown";
+	if (n.temperature)
+		_snprintf_s(this->NvmeStatus,sizeof(this->NvmeStatus),_TRUNCATE,
+		    "NVMe%u %dC %s%s",n.disk,static_cast<int>(n.temperature)-273,label,
+		    n.unavailable?" (partial)":"");
+	else
+		_snprintf_s(this->NvmeStatus,sizeof(this->NvmeStatus),_TRUNCATE,
+		    "NVMe: %s",n.sampled&&!n.count&&!n.unavailable?"none":"unavailable");
+	if (updated && this->NvmeAlert.observe(n.state)) {
+		char message[160];
+		_snprintf_s(message,sizeof(message),_TRUNCATE,
+		    "%s: check SSD cooling. Fan settings unchanged.",this->NvmeStatus);
+		this->Trace(message);
+		if (!this->NoBallons) {
+			const DWORD icon=n.state==ThermalState::Critical?NIIF_ERROR:NIIF_WARNING;
+			if (this->pTaskbarIcon)
+				this->pTaskbarIcon->SetBalloon(icon,"NVMe temperature",message,15);
+			else if (this->ppTbTextIcon && this->ppTbTextIcon[0])
+				this->ppTbTextIcon[0]->DiShowballon(message,"NVMe temperature",icon,15);
+		}
 	}
 }
 

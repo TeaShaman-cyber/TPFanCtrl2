@@ -27,6 +27,9 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include "smart_shadow.h"
+#include "cpu_msr_win.h"
+#include "nvme_monitor.h"
 
 constexpr const char* FANCONTROLVERSIONS = "2.7.0 Single Fan";
 constexpr const char* FANCONTROLVERSIOND = "2.7.0 Dual Fan";
@@ -246,6 +249,21 @@ protected:
 
 	bool HandleData();
 
+	smart_policy::Shadow SmartShadow;
+	// Opt-in observer only. Worker publishes a frame before WM__NEWDATA;
+	// dialog consumes it after joining that worker.
+	bool SmartMsrShadow = false;
+	cpu_msr::Reader CpuMsr;
+	cpu_msr::Frame CpuMsrFrame;
+	unsigned long long CpuEpoch = 0, CpuPollEpoch = 0, CpuWorkerEpoch = 0;
+	bool CpuMsrAttempted = false;
+	bool NvmeMonitorEnabled = false;
+	nvme_monitor::Monitor NvmeMonitor;
+	smart_policy::NvmeAlert NvmeAlert;
+	char NvmeStatus[64]{};
+	void UpdateNvmeMonitor();
+	void NvmeTitle(const char* base, char* result, size_t size) const;
+	void ObserveSmartShadow();
 	void SmartControl();
 
 	bool FanSpunUp();

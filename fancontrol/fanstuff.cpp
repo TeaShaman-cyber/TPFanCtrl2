@@ -317,6 +317,9 @@ bool FANCONTROL::HandleData(void) {
 	}
 
 	const bool reconcile = this->FanCommandPending || (!SingleFan && State.FanCtrl != State.Fan2Ctrl);
+	if (this->CurrentMode != 2)
+		this->SmartShadow.reset();
+
 	switch (this->CurrentMode) {
 
 	case 1: // BIOS
@@ -345,6 +348,7 @@ bool FANCONTROL::HandleData(void) {
 		break;
 
 	case 2: // Smart
+		this->ObserveSmartShadow();
 		this->SmartControl();
 		break;
 
@@ -410,6 +414,31 @@ bool FANCONTROL::HandleData(void) {
 //-------------------------------------------------------------------------
 //  smart fan control depending on temperature
 //-------------------------------------------------------------------------
+void FANCONTROL::ObserveSmartShadow() {
+	if (!this->SmartShadow.enabled() || g_clientMode || !this->ActiveMode ||
+	    this->isPowerSuspendState || this->restorePending) {
+		this->SmartShadow.reset();
+		return;
+	}
+	// Diagnostic only. No action from this observer may reach SetFan.
+	const int observed = static_cast<unsigned char>(this->State.FanCtrl);
+	const auto now = ::GetTickCount64();
+	int temperature = this->MaxTemp;
+	bool valid = temperature > 0 && temperature <= 110;
+	if (this->SmartMsrShadow) {
+		valid = this->CpuPollEpoch == this->CpuEpoch &&
+			cpu_msr::shadow_temperature(this->CpuMsrFrame, now, this->MaxTemp, temperature);
+	}
+	const auto result = this->SmartShadow.observe(now, temperature, observed, valid);
+	if (result.action.kind != smart_policy::Kind::Hold) {
+		char message[160];
+		sprintf_s(message, sizeof(message),
+		    "SmartShadow (simulation): temp=%d, valid=%d, actual=%d, projected=%d",
+		    temperature, valid ? 1 : 0, observed, result.projected);
+		this->Trace(message);
+	}
+}
+
 void FANCONTROL::SmartControl(void) {
 	char obuf[256] = "";
 	int i, newfanctrl = -1, levelIndex = -1, fanctrl = static_cast<unsigned char>(this->State.FanCtrl);

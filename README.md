@@ -126,3 +126,83 @@ Public domain (Unlicense), inherited from upstream. `LpcACPIEC.bin` and
 `fancontrol/pawnio/COPYING`.
 No warranty: this program writes to your embedded controller, use it at
 your own risk.
+
+### Experimental Smart observation (fork, no actuator changes)
+
+The Smart thermal policy is under development. The default remains the original
+Smart algorithm. An optional single INI line enables counterfactual logging
+inside the existing Smart engine, not control. Example syntax (synthetic
+parameters, **not** an L14 profile):
+
+```ini
+// SmartShadow=100 3000 10000 2000 85 70 5000 ; 40 2000 80 5000 ; 1 2000 2 3000 3 4000 4 5000
+```
+
+Fields before the first semicolon: RPM hysteresis, rise dwell (ms), fall dwell
+(ms), maximum sample gap (ms), urgent temperature (C), recovery temperature
+(C), recovery dwell (ms). The next section contains temperature/RPM pairs;
+the final section contains consecutive level/RPM pairs. Malformed or duplicate
+configuration disables the observer. No default device parameters are supplied.
+It starts from the observed level (or firmware if uncalibrated), then updates
+only a simulated level. The real fan is always controlled by the original
+algorithm. Logs explicitly distinguish actual and projected levels. Read
+errors, profile/mode changes and resume reset simulation state. Existing EC
+temperatures are not independently verified thermal safety inputs.
+
+Offline replay of the same observer:
+
+```sh
+g++ -std=c++11 -I fancontrol tools/research/replay_smart.cpp -o replay-smart
+./replay-smart '40 60000 120000 31000 85 70 60000 ; 60 3610 80 4132 ; 4 3610 5 4132' < elapsed-ms-temperature.txt
+```
+
+Input is one elapsed nonnegative millisecond value and one Celsius measurement
+per line; output is elapsed milliseconds and projected level (128 = firmware).
+The example is a coarse research replay using 30-second samples, not a live
+configuration. Replayed temperatures are observations of the original
+controller, not predictions of another controller's thermal response.
+
+#### Direct Intel CPU telemetry (experimental observer only)
+
+On the tested single-package Intel laptop, the optional line
+`SmartMsrShadow=1` supplements an enabled SmartShadow with direct DTS and
+RAPL readings. It does not select a control mode or change fan commands.
+It is disabled by default. Keep the official signed `IntelMSR.bin` next
+to the program; the research module is from PawnIO.Modules release
+[0.2.11](https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11),
+SHA-256 `d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f`.
+It is LGPL-2.1-or-later and is not redistributed by this change.
+No LHM, WMI, HTTP or additional service is needed.
+
+Only five fixed MSR reads are exposed by the adapter. The CPU scan
+runs on the existing EC worker after the EC read, not inside the EC
+transaction. A failed or old frame is invalid; a suspend/resume epoch
+invalidates earlier observations. The observer uses the maximum of valid
+CPU and existing EC temperatures and rejects invalid EC input. Power is
+diagnostic only, not part of the decision rule. The 250 ms scan limit and
+500 ms observation-age limit are provisional research thresholds, not
+hard driver deadlines. A native standalone probe and offline tests do not
+establish the full Windows engine's shutdown/resume or service behavior.
+Do not enable this in a live engine before that verification.
+
+#### Optional NVMe temperature warning
+
+Set `NvmeMonitor=1` in TPFanControl.ini to show the NVMe temperature
+and status in the interactive window title and tray tooltip. This is an
+independent informational feature, not a fan-control sensor. It works
+in the tray/client without an extra monitoring service. It uses Windows
+storage property queries only, with no Samsung Magician, LHM or WMI.
+The option is off by default during testing.
+
+The monitor checks detected NVMe disks about every 15 seconds, shows the
+highest severity and then the hottest disk in that severity, and labels
+incomplete data. A warning is raised within 5 K of the controller's
+reported warning limit, or on its SMART thermal warning bit; critical
+uses the reported critical limit. Missing limits are not invented.
+Notifications are raised on severity escalation, rearmed after two
+normal scans, and respect NoBallons. No threshold changes, storage
+writes, fan commands or CPU throttling are performed. The background
+read owns only its result; one stalled disk read cannot stall the
+fan engine, and stale observations become unavailable. No guarantee
+of every controller/USB/RAID transport being supported is made.
+Monitoring requires the interactive instance to be running.

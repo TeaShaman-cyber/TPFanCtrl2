@@ -48,6 +48,11 @@ FANCONTROL::ReadConfig(const char* configfile)
 	this->fan2speed = 0;
 
 	this->IndSmartLevel = 0;
+	this->SmartShadow = smart_policy::Shadow{};
+	this->SmartMsrShadow = false;
+	bool msrShadowSeen = false;
+	this->NvmeMonitorEnabled = false;
+	bool nvmeSeen = false;
 
 	this->LidSmartLevel = 0;
 
@@ -71,6 +76,28 @@ FANCONTROL::ReadConfig(const char* configfile)
 
 			if (buf[0] == '/' || buf[0] == '#' || buf[0] == ';')
 				continue;
+
+			if (_strnicmp(buf, "NvmeMonitor=", 12) == 0) {
+				const char* value = buf + 12;
+				this->NvmeMonitorEnabled = !nvmeSeen && value[0] == '1' &&
+					value[1 + strspn(value + 1, " \t\r\n")] == 0;
+				nvmeSeen = true;
+				continue;
+			}
+
+			if (_strnicmp(buf, "SmartMsrShadow=", 15) == 0) {
+				const char* value = buf + 15;
+				this->SmartMsrShadow = !msrShadowSeen && value[0] == '1' &&
+					value[1 + strspn(value + 1, " \t\r\n")] == 0;
+				msrShadowSeen = true;
+				continue;
+			}
+
+			if (_strnicmp(buf, "SmartShadow=", 12) == 0) {
+				if (!this->SmartShadow.configure(buf + 12))
+					this->Trace("SmartShadow: invalid or duplicate configuration, disabled");
+				continue;
+			}
 
 			if (_strnicmp(buf, "UseTWR=", 7) == 0) {
 				this->UseTWR = atoi(buf + 7);
