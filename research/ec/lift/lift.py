@@ -18,7 +18,7 @@ class V:
         m=re.fullmatch(r"(const|register|unique|ram):([0-9a-f]+):([1-9][0-9]*)",text)
         require(m is not None, "invalid varnode "+text)
         v=cls(m[1],int(m[2],16),int(m[3]))
-        require(v.size in (1,2,4,8), "unsupported width")
+        require((v.size in (1,2,4,8) or (v.space=="const" and v.size==3)), "unsupported width")
         return v
 
 @dataclass(frozen=True)
@@ -56,10 +56,11 @@ def parse(src):
     return blocks,end
 
 def lift(src, kind="clamp"):
-    require(kind in ("clamp","recovery"),"unknown slice")
+    require(kind in ("clamp","recovery","sample"),"unknown slice")
     recovery=kind=="recovery"
+    sample=kind=="sample"
     blocks,end=parse(src)
-    require((min(blocks),end)==((0x199ea,0x19a08) if recovery else (0x19afc,0x19b12)),"unexpected slice")
+    require((min(blocks),end)==({"recovery":(0x199ea,0x19a08),"clamp":(0x19afc,0x19b12),"sample":(0x199aa,0x199e8)}[kind]),"unexpected slice")
     # Known ABI inputs; abstract memory only for two exact record offsets.
     initial={V("register",4,4):const(4,0x11454),
              V("register",8,2):E(2,"request"),
@@ -68,8 +69,16 @@ def lift(src, kind="clamp"):
     if recovery:
         del initial[V("register",8,2)]
         mem[0x11454+0x20]=E(2,"output")
+    if sample:
+        initial.pop(V("register",8,2))
+        initial[V("register",14,4)]=const(4,0x11454)
+        initial[V("register",0,2)]=E(2,"r0")
+        mem={0x11454+0x10:E(2,"rpm"),0x11454+0xac:E(1,"misses")}
     def get(env,v):
         if v.space=="const": return const(v.size,v.offset)
+        if sample and v==V("register",0,1):
+            word=get(env,V("register",0,2))
+            return E(1,f"(BitVec.setWidth 8 {word.lean})")
         require(v in env,"uninitialized "+repr(v))
         return env[v]
     def put(env,v,e):
@@ -79,7 +88,16 @@ def lift(src, kind="clamp"):
                 raise LiftError("overlapping varnodes unsupported")
         env[v]=e
     visited=set()
-    def step(pc,idx,env,memory,writes=0):
+    serial=0
+    def step(pc,idx,env,memory,writes=0,active=frozenset()):
+        nonlocal serial
+        require((pc,idx) not in active,"control-flow cycle")
+        active=active|{(pc,idx)}
+        if sample and pc in (0x199be,0x199ce):
+            require(writes==1,"sample must store counter exactly once")
+            value=memory[0x11454+0xac].lean
+            return f"((BitVec.setWidth 16 {value}) ||| ({256 if pc==0x199be else 0} : BitVec 16))"
+        require(not sample or pc!=end,"sample escaped decision boundary")
         if pc==end:
             if recovery:
                 require(writes==1,"recovery must store floor exactly once")
@@ -88,25 +106,25 @@ def lift(src, kind="clamp"):
             return get(env,V("register",2,2)).lean
         require(pc in blocks,"bad target")
         nxt,ops=blocks[pc]
-        if idx==len(ops): return step(nxt,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes)
+        if idx==len(ops): return step(nxt,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes,active)
         visited.add((pc,idx))
         name,out,args=ops[idx]
         if name in ("BRANCH","CBRANCH"):
             require(out is None and len(args)==(1 if name=="BRANCH" else 2),"branch arity")
             dst=args[0]
-            require(dst.space=="ram" and pc<dst.offset<=end and (dst.offset in blocks or dst.offset==end),"invalid/loop branch")
-            yes=step(dst.offset,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes)
+            require(dst.space=="ram" and (sample or pc<dst.offset) and dst.offset<=end and (dst.offset in blocks or dst.offset==end),"invalid/loop branch")
+            yes=step(dst.offset,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes,active)
             if name=="BRANCH": return yes
             cond=get(env,args[1])
             require(cond.size==1,"condition width")
-            no=step(pc,idx+1,dict(env),dict(memory),writes)
+            no=step(pc,idx+1,dict(env),dict(memory),writes,active)
             return f"(if {truth(cond)} then {yes} else {no})"
         if name=="STORE":
-            require(recovery and out is None and len(args)==3 and args[0]==V("const",0x1a1,8),"unsupported store")
+            require((recovery or sample) and out is None and len(args)==3 and args[0]==V("const",0x1a1,8),"unsupported store")
             addr,value=get(env,args[1]),get(env,args[2])
-            require(addr.size==4 and addr.known==0x11454+0x1e and value.size==2 and writes==0,"store outside floor contract")
+            require(addr.size==4 and addr.known==0x11454+(0xac if sample else 0x1e) and value.size==(1 if sample else 2) and writes==0,"store outside slice contract")
             memory=dict(memory);memory[addr.known]=value
-            return step(pc,idx+1,env,memory,writes+1)
+            return step(pc,idx+1,env,memory,writes+1,active)
         require(out is not None,"missing output")
         a=[get(env,v) for v in args]
         n=out.size
@@ -159,10 +177,69 @@ def lift(src, kind="clamp"):
             require(len(a)==1 and a[0].size==n==1,"bool width")
             e=boolean(f"(!{truth(a[0])})")
         else: raise LiftError("unsupported operation "+name)
+        if sample and e.known is None:
+            serial+=1;name=f"v{serial}"
+            put(env,out,E(e.size,name))
+            return f"(let {name} : BitVec {e.size*8} := {e.lean}; {step(pc,idx+1,env,memory,writes,active)})"
         put(env,out,e)
-        return step(pc,idx+1,env,memory,writes)
+        return step(pc,idx+1,env,memory,writes,active)
     body=step(min(blocks),0,initial,mem)
-    require(visited=={(pc,i) for pc,(_,ops) in blocks.items() for i in range(len(ops))},"unvisited operations")
+    require(visited=={(pc,i) for pc,(_,ops) in blocks.items() for i in range(len(ops)) if not sample or not 0x199be<=pc<=0x199d0},"unvisited operations")
+    if sample:
+        return """import Std.Tactic.BVDecide
+set_option warningAsError true
+set_option maxRecDepth 8192
+set_option maxHeartbeats 8000000
+namespace R17Sample
+-- Low byte: stored counter. Bit 8: entry to recovery branch, not its effects.
+def lifted (misses : BitVec 8) (rpm r0 psr : BitVec 16) : BitVec 16 :=
+  """+body+"""
+def spec (misses : BitVec 8) (rpm : BitVec 16) : BitVec 16 :=
+  let next := if rpm == 65535 then misses + 1 else 0
+  let recover := if rpm == 65535 then BitVec.slt (8 : BitVec 8) next else decide (rpm ≤ 299)
+  (BitVec.setWidth 16 next) ||| (if recover then 256 else 0)
+
+theorem exact_sample (misses : BitVec 8) (rpm r0 psr : BitVec 16) :
+    lifted misses rpm r0 psr = spec misses rpm := by
+  unfold lifted spec
+  bv_decide
+
+theorem eighth_or_less (misses : BitVec 8) (r0 psr : BitVec 16) (h : misses < 8) :
+    lifted misses 65535 r0 psr = BitVec.setWidth 16 (misses + 1) := by
+  rw [exact_sample]
+  unfold spec
+  bv_decide
+
+theorem ninth_miss (r0 psr : BitVec 16) :
+    lifted 8 65535 r0 psr = 265 := by
+  rw [exact_sample]
+  decide
+
+theorem valid_reset (misses : BitVec 8) (rpm r0 psr : BitVec 16)
+    (h : 300 ≤ rpm) (h2 : rpm ≠ 65535) :
+    lifted misses rpm r0 psr = 0 := by
+  rw [exact_sample]
+  unfold spec
+  bv_decide
+
+theorem low_speed (misses : BitVec 8) (rpm r0 psr : BitVec 16) (h : rpm ≤ 299) :
+    lifted misses rpm r0 psr = 256 := by
+  rw [exact_sample]
+  unfold spec
+  bv_decide
+
+theorem signed_counterexample : lifted 127 65535 0 0 = 128 := by decide
+theorem wrap_counterexample : lifted 255 65535 0 0 = 0 := by decide
+
+#print axioms exact_sample
+#print axioms eighth_or_less
+#print axioms ninth_miss
+#print axioms valid_reset
+#print axioms low_speed
+#print axioms signed_counterexample
+#print axioms wrap_counterexample
+end R17Sample
+"""
     if recovery:
         return """import Std.Tactic.BVDecide
 set_option warningAsError true
@@ -238,9 +315,10 @@ def with_oracle(src, rows, kind="clamp"):
         a=line.split()
         require(len(a)==5 and all(x.isdecimal() and 0<=int(x)<=65535 for x in a),"invalid oracle row")
         lo,hi,req,psr,result=map(int,a)
+        require(kind!="sample" or (lo<=255 and result<=511),"sample oracle width")
         examples.append(f"example : lifted {lo} {hi} {req} {psr} = {result} := by decide")
-    require(len(examples)==353,"incomplete oracle corpus")
-    end="end R17Recovery" if kind=="recovery" else "end R17Lift"
+    require(len(examples)==(2176 if kind=="sample" else 353),"incomplete oracle corpus")
+    end={"recovery":"end R17Recovery","clamp":"end R17Lift","sample":"end R17Sample"}[kind]
     return out.replace(end,"\n".join(examples)+"\n"+end)
 
 if __name__=="__main__":

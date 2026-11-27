@@ -53,3 +53,27 @@ CI runs clamp and recovery in separate matrix jobs with exact-head artifacts.
 The recovery slice ends before the subsequent substep increment, not a full
 recovery routine. Universal bv_decide results rely on Lean's native reflection
 axioms; concrete by decide examples do not add that dependency.
+
+## Sample decision slice (iteration 160)
+
+Raw 199aa..199e8 exclusive is the body of sample validation. The translated
+projection stops at 199be (recovery branch) or 199ce (normal branch), before
+flag writes, helper call and epilogue. Initial ABI R3:R2 and R8:R7 fixed to
+record 11454; symbolic R0, PSR, 16-bit RPM and 8-bit miss count. Output is a
+16-bit word: updated count in low byte, recovery decision in bit 8.
+The shared lifter checks cycles by path rather than address ordering,
+permits the exact low-byte R0 read and 3-byte constants, and emits SSA-like
+let bindings for the larger expression. Only the counter byte may be stored
+and exactly once on each path. All decision ops must be covered; the
+explicitly excluded continuation is not a proof of its effects.
+The original-code oracle runs the full sample body from 199a6 through the
+stage helper up to 199cc (before return), with initial stage11 and substep8;
+observes stage11/12, substep0 and stored count. 2176 cases: all 256 counts
+times 8 RPM boundaries, plus 128 seeded random cases, with varying R0/PSR.
+Signed comparison after increment: recovery on missing sample iff new count
+9..127, not all unsigned counts >8. 127 -> 128 and 255 -> 0 are concrete
+out-of-domain counterexamples, not established reachable scheduler states.
+Ordinary valid RPM >=300 clears misses; 0..299 recovers immediately.
+The prior Nat abstraction in Authority.lean is only accurate for normal
+reachable counts; do not generalize its unsigned comparison to arbitrary
+byte state. CI separately verifies the translated decision and all examples.

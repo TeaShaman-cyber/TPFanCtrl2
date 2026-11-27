@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slice: [clamp, recovery]
+        slice: [clamp, recovery, sample]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -105,6 +105,12 @@ jobs:
               ir=recovery.pcode
               rows=recovery.tsv
               false_prop='R17Recovery.lifted 65535 65535 65535 0 = 65535'
+              ;;
+            sample)
+              file=LiftedSample.lean
+              ir=sample.pcode
+              rows=sample.tsv
+              false_prop='R17Sample.lifted 127 65535 0 0 = 384'
               ;;
             *) exit 2 ;;
           esac

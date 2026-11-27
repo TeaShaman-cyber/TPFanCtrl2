@@ -27,6 +27,18 @@ class TestLift(unittest.TestCase):
     def test_recovery_wrong_store_address(self):
         src=Path("recovery.pcode").read_text().replace("unique:68000:4 const:1e:2","unique:68000:4 const:20:2")
         with self.assertRaises(LiftError): lift(src,"recovery")
+    def test_sample(self):
+        src=Path("sample.pcode").read_text()
+        result=lift(src,"sample")
+        self.assertIn("theorem ninth_miss",result)
+        self.assertIn("theorem signed_counterexample",result)
+        self.assertEqual(result,lift(src,"sample"))
+    def test_sample_loop(self):
+        src=Path("sample.pcode").read_text().replace("ram:199b4:4","ram:199dc:4")
+        with self.assertRaises(LiftError): lift(src,"sample")
+    def test_sample_store_width(self):
+        src=Path("sample.pcode").read_text().replace("unique:62300:4 register:0:1","unique:62300:4 register:0:2")
+        with self.assertRaises(LiftError): lift(src,"sample")
     def test_unknown(self):
         src=Path("clamp.pcode").read_text().replace("INT_ZEXT","UNSUPPORTED",1)
         with self.assertRaises(LiftError): lift(src)
