@@ -58,16 +58,16 @@ def floorOrder (a b : BitVec 16) : Prop := a ≤ b
 theorem local_simulation {a b : State} (h : LocalStep a b) (ha : bounded a) :
     bounded b ∧ Walk floorOrder a.floor b.floor := by
   cases h with
-  | sample s rpm r0 psr guard =>
-    exact ⟨ha, Walk.refl s.floor⟩
-  | raise s psr guard =>
-    have hr := R17Recovery.recovery_nondecreasing s.floor 500 s.output psr ha.1 ha.2 (by decide)
+  | sample rpm r0 psr guard =>
+    exact ⟨ha, Walk.refl a.floor⟩
+  | raise psr guard =>
+    have hr := R17Recovery.recovery_nondecreasing a.floor 500 a.output psr ha.1 ha.2 (by decide)
     exact ⟨⟨hr.2, ha.2⟩, Walk.single hr.1⟩
-  | clamp s request psr =>
-    have hc := R17Lift.ordered_clamp s.floor 500 request psr ha.1
-    exact ⟨⟨ha.1, hc.2⟩, Walk.refl s.floor⟩
-  | resume s guard =>
-    exact ⟨ha, Walk.refl s.floor⟩
+  | clamp request psr =>
+    have hc := R17Lift.ordered_clamp a.floor 500 request psr ha.1
+    exact ⟨⟨ha.1, hc.2⟩, Walk.refl a.floor⟩
+  | resume guard =>
+    exact ⟨ha, Walk.refl a.floor⟩
 
 theorem all_lifted_walks_monotone {a b : State} (h : Walk LocalStep a b)
     (ha : bounded a) : bounded b ∧ a.floor ≤ b.floor := by
