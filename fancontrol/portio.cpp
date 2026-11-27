@@ -278,15 +278,34 @@ SendEcCommandAndAddress(const EcOpContext& ctx, UCHAR command) {
 // Returns: true if successful, false if timeout or error
 //-------------------------------------------------------------------------
 static bool
-ExecuteEcRead(const EcOpContext& ctx, char& outData, bool strictObf) {
+ExecuteEcRead(const EcOpContext& ctx, char& outData, bool strictObf,
+    int telemetryWaitMs = -1, int* ready = nullptr) {
+	if (ready) *ready = -1;
 	if (!SendEcCommandAndAddress(ctx, ACPI_EC_COMMAND_READ))
 		return false;
 
 	if (strictObf) {
 		// wait for OBF to be SET (data ready to read)
 		if (!WaitForAnySet(ctx.ctrlPort, ACPI_EC_FLAG_OBF)) {
+			if (ready) *ready = 0;
 			TraceEcFailure(ctx, 4);
 			return false;
+		}
+		if (ready) *ready = 1;
+	} else if (telemetryWaitMs >= 0 && ready) {
+		// Opt-in observation of the existing response, not another EC
+		// transaction. Compatibility reads without OBF remain unverified.
+		const DWORD start = ::GetTickCount();
+		const DWORD budget = static_cast<DWORD>(telemetryWaitMs > 30 ? 30 : telemetryWaitMs);
+		for (;;) {
+			UCHAR status;
+			if (!PortAccess_TryReadByte(ctx.ctrlPort, status)) { *ready = -1; break; }
+			*ready = (status & ACPI_EC_FLAG_OBF) ? 1 : 0;
+			if (*ready) break;
+			const DWORD elapsed = ::GetTickCount()-start;
+			if (elapsed >= budget) break;
+			const DWORD remaining = budget-elapsed;
+			::Sleep(remaining < DEFAULT_SLEEP_TICKS ? remaining : DEFAULT_SLEEP_TICKS);
 		}
 	}
 
@@ -343,7 +362,16 @@ FANCONTROL::ReadByteFromEC(int offset, char* pdata) {
 			ecOffset, -1, "readec", traceText, sizeof(traceText), this
 		};
 
-		if (ExecuteEcRead(ctx, *pdata, this->StrictEcReadObf)) {
+		// Only telemetry registers in the owned status poll; never alter
+		// command verification, layout selection or strict-mode semantics.
+		int* ready = nullptr;
+		if (this->EcAuditWaitMs >= 0) {
+			if (ecOffset == 0x84) ready = &this->EcReadReady[0];
+			else if (ecOffset == 0x85) ready = &this->EcReadReady[1];
+			else if (ecOffset == 0x78) ready = &this->EcReadReady[2];
+		}
+		if (ExecuteEcRead(ctx, *pdata, this->StrictEcReadObf,
+		    ready ? this->EcAuditWaitMs : -1, ready)) {
 			if (i > 0) {
 				sprintf_s(traceText, sizeof(traceText),
 					"readec: SUCCESS after layout switch to %s (ctrl=0x%04X data=0x%04X)",

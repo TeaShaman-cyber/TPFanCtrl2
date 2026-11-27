@@ -142,3 +142,29 @@ adapters intentionally do not enable this experimental argument. Physical
 emergency setpoint adequacy, transport-loss semantics, and hardware
 acceptance remain open. No live emergency behavior is changed by this
 prototype.
+
+### Iteration 143 transport experiment (opt-in)
+
+The R17 conversion and mailbox replay (issue #289 iteration 142) motivate
+separate readiness evidence for registers 84, 85 and 78. The new
+EcTelemetryWaitMs setting defaults to -1 (disabled). Zero observes OBF
+without deliberately waiting; 1..30 waits for at most the configured
+software time budget per byte in the first pair only (six waits, at most
+180 ms nominal additional wait, excluding scheduling and IO latency).
+Existing retries are observation-only. No additional EC read command,
+address write or data-port read is issued. Strict mode is unchanged;
+legacy compatibility data without observed OBF is still unverified.
+Readiness is not proof of physical accuracy or correct mailbox ownership.
+
+EcPair records both received tach words and sensor slot 0 (subject to
+existing sensor offset configuration), three readiness values per sample,
+pair attempts and mutex/total durations. It reports suspect samples and
+a periodic sample of accepted pairs. It does not overwrite measured
+data, reject an otherwise accepted status poll, change command
+verification, or modify the Smart decision law. It does not yet cover
+all rejected-pair contents. The layer is restricted to the existing
+single-fan, non-TWR status poll and is disabled by default. The
+fault-injection result is not hardware validation. Start with observation
+only in a separately authorized live trial; compare readiness, raw
+anomalies and timing before trying bounded waiting. Keep strict global
+OBF disabled on this model until evidence supports changing it.

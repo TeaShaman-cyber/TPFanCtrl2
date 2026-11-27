@@ -113,6 +113,11 @@ protected:
 	int ActiveMode;
 	int SingleFan;
 	bool StrictEcReadObf = false;
+	// -1: disabled, 0: observe, 1..30: bounded wait per telemetry byte.
+	int EcTelemetryWaitMs = -1;
+	int EcAuditWaitMs = -1;
+	int EcReadReady[3] = {-1,-1,-1};
+	unsigned long long LastEcAuditLog = 0;
 	bool FanCommandPending = false;
 	int PowerSuspendMode;
 	int LidSmartLevel;  // 1 or 2 runs that smart profile while the lid is closed, 0 off

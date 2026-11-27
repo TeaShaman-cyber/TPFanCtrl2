@@ -11,6 +11,7 @@ PREAMBLE = r"""
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 using UCHAR=unsigned char; using USHORT=unsigned short;
 using DWORD=uint32_t; using ULONG64=uint64_t; using HANDLE=int;
 constexpr HANDLE INVALID_HANDLE_VALUE=-1;
@@ -25,7 +26,7 @@ DWORD GetTickCount(){return tick;}
 void Sleep(int n){tick+=n;}
 struct EcOpContext{USHORT ctrlPort,dataPort; UCHAR ecOffset; int ecData;};
 static int writes, reads, attempts, fail_at, ready_after;
-static UCHAR response;
+static UCHAR response, previous_response=0x42;
 static bool is_read;
 HANDLE PawnIoHandleFor(USHORT){return 1;}
 UCHAR g_tvicReadPort(USHORT){return 0;}
@@ -35,7 +36,7 @@ bool PawnIoExecute(HANDLE,const char* name,const ULONG64* in,DWORD,ULONG64* out,
  if(attempts==fail_at)return false;
  if(std::strcmp(name,"ioctl_pio_write")==0){++writes;return true;}
  if(in[0]==0x1604){*out=(is_read && writes>=2 && ready_after>=0 && tick>=DWORD(ready_after))?1:0;}
- else{++reads;*out=(ready_after>=0 && tick>=DWORD(ready_after))?response:0x42;}
+ else{++reads;*out=(ready_after>=0 && tick>=DWORD(ready_after))?response:previous_response;}
  return true;
 }
 void TraceEcTimeout(const EcOpContext&,int,bool){}
@@ -58,6 +59,40 @@ int main(){
  reset(true,0,0,0xff); check(READ_EC(ctx,data,true) && (UCHAR)data==0xff,"valid FF is data");
  reset(true,0); check(READ_EC(ctx,data,true),"normal read succeeds");
  int read_ops=attempts;
+ // Opt-in telemetry readiness observation, no extra command/address/data IO.
+ int ready=-2;
+ reset(true,30,0,9);previous_response=0xd4;
+ check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==9 && ready==1 && tick==30 && reads==1 && writes==2,
+       "bounded telemetry wait prevents stale duplicate");
+ reset(true,30,0,48);previous_response=9;
+ check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==48 && ready==1 && reads==1,
+       "bounded telemetry wait prevents prior tach byte becoming temperature");
+ reset(true,-1,0,48);previous_response=9;
+ check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==9 && ready==0 && tick==30 && reads==1 && writes==2,
+       "absent OBF stays explicitly unverified in compatibility mode");
+ reset(true,30,0,48);
+ check(ExecuteEcRead(ctx,data,false,0,&ready) && (UCHAR)data==9 && ready==0 && tick==0,
+       "observation-only performs no deliberate wait");
+ reset(true,0,0,0xff);
+ check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==255 && ready==1,
+       "ready flag is independent of value");
+ reset(true,-1);data=0x33;
+ check(!ExecuteEcRead(ctx,data,true,30,&ready) && data==0x33 && reads==0 && ready==0,
+       "strict mode is never downgraded");
+ reset(true,30,6,48);previous_response=9;
+ check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==9 && ready==-1,
+       "failed optional status read remains unknown");
+ reset(true,-1,0,48);
+ check(ExecuteEcRead(ctx,data,false,500,&ready) && ready==0 && tick==30,
+       "telemetry wait clamps to 30ms");
+ for (UCHAR low : {UCHAR(0xd4),UCHAR(0xce),UCHAR(0x87),UCHAR(0xa5),UCHAR(0xae)}) {
+  reset(true,30,0,9);previous_response=low;
+  check(ExecuteEcRead(ctx,data,false,30,&ready) && (UCHAR)data==9 && ready==1 && reads==1 && writes==2,
+        "five observed duplicate-byte signatures recover in delayed-response fixture");
+ }
+
+ previous_response=0x42;
+
  reset(true,0);g_backend=PORTACCESS_NONE;data=0x33;
  check(!READ_EC(ctx,data,true) && data==0x33,"no backend cannot read");g_backend=PORTACCESS_PAWNIO;
  for(int fail=1;fail<=read_ops;++fail){

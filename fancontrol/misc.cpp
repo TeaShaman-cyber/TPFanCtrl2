@@ -340,6 +340,12 @@ FANCONTROL::ReadConfig(const char* configfile)
 				continue;
 			}
 
+			if (_strnicmp(buf, "EcTelemetryWaitMs=", 18) == 0) {
+				const int n = atoi(buf + 18);
+				this->EcTelemetryWaitMs = n >= 0 && n <= 30 ? n : -1;
+				continue;
+			}
+
 			if (_strnicmp(buf, "SingleFan=", 10) == 0) {
 				this->SingleFan = atoi(buf + 10);
 				continue;

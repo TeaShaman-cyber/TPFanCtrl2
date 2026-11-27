@@ -864,7 +864,10 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 		return false;
 	}
 
+	const auto start = GetTickCount64();
 	if (!this->LockECAccess()) return false;
+	const auto locked = GetTickCount64();
+	const bool audit = this->SingleFan && !this->UseTWR && this->EcTelemetryWaitMs >= 0;
 
 	// reading from the EC seems to yield erratic results at times (probably
 	// due to collision with other drivers reading from the port).  So try
@@ -872,18 +875,50 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 	// values, using the above match function
 
 	for (int i = 0; i < numTries; i++) {
+		// Bound deliberate waits to the first pair; retries observe only.
+		this->EcAuditWaitMs = audit ? (i == 0 ? this->EcTelemetryWaitMs : 0) : -1;
+		for (auto& v : this->EcReadReady) v = -1;
 		const bool okSample1 = this->ReadEcRaw(&sample1);
+		const int r1[3] = {this->EcReadReady[0],this->EcReadReady[1],this->EcReadReady[2]};
+		for (auto& v : this->EcReadReady) v = -1;
 		const bool okSample2 = this->ReadEcRaw(&sample2);
+		const int r2[3] = {this->EcReadReady[0],this->EcReadReady[1],this->EcReadReady[2]};
 
 		if (okSample1 && okSample2 && this->SampleMatch(&sample1, &sample2)) {
 			memcpy(pfcstate, &sample2, sizeof(*pfcstate));
+			this->EcAuditWaitMs = -1;
 			this->FreeECAccess();
+			if (audit) {
+				const auto now = GetTickCount64();
+				// Keep both observed words, without claiming either is the
+				// true RPM. Log bounded samples of missing readiness and
+				// immediate suspect values, without extra EC transactions.
+				const unsigned lo1 = static_cast<unsigned char>(sample1.Fan1SpeedLo);
+				const unsigned hi1 = static_cast<unsigned char>(sample1.Fan1SpeedHi);
+				const unsigned lo2 = static_cast<unsigned char>(sample2.Fan1SpeedLo);
+				const unsigned hi2 = static_cast<unsigned char>(sample2.Fan1SpeedHi);
+				const unsigned t1 = static_cast<unsigned char>(sample1.Sensors[0]);
+				const unsigned t2 = static_cast<unsigned char>(sample2.Sensors[0]);
+				const bool suspect = (hi1<<8|lo1)>0x1fff || (hi2<<8|lo2)>0x1fff ||
+				    t1==hi1 || t2==hi2;
+				if (suspect || !this->LastEcAuditLog || now-this->LastEcAuditLog >= 10000) {
+					char msg[160];
+					sprintf_s(msg,sizeof(msg),
+					    "EcPair tick=%llu a=%02x%02x/%u obf=%d,%d,%d b=%02x%02x/%u obf=%d,%d,%d tries=%d lock=%llu ms=%llu",
+					    static_cast<unsigned long long>(now),
+					    hi1,lo1,t1,r1[0],r1[1],r1[2],hi2,lo2,t2,r2[0],r2[1],r2[2],i+1,
+					    static_cast<unsigned long long>(locked-start),static_cast<unsigned long long>(now-start));
+					this->Trace(msg);
+					this->LastEcAuditLog = now;
+				}
+			}
 			return TRUE;
 		}
 
 		if (i + 1 < numTries) ::Sleep(sleepTicks);
 	}
 
+	this->EcAuditWaitMs = -1;
 	this->FreeECAccess();
 
 	this->Trace("failed to read reliable status values from EC");
