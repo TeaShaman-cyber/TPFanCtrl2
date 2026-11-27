@@ -36,8 +36,8 @@ def boolean(b):
 
 def truth(e): return f"({e.lean} != 0)"
 
-def parse(src):
-    blocks={}; pc=None; end=0; done=False
+def parse(src, allow_nop=False):
+    blocks={}; pc=None; end=0; done=False; nops=set()
     for line in src.splitlines():
         require(not done,"data after marker")
         if line=="EXTRACT_PASS": done=True;continue
@@ -48,11 +48,12 @@ def parse(src):
             pc=int(p[1],16);n=int(p[2])
             require(pc not in blocks and (not blocks or pc==end) and n in (2,4,6),"noncontiguous instructions")
             blocks[pc]=(pc+n,[]);end=pc+n
+            if allow_nop and p[3:]==["NOP"]: nops.add(pc)
         elif p[0]=="OP":
             require(pc is not None and len(p)>=4,"operation outside instruction")
             blocks[pc][1].append((p[1],None if p[2]=="-" else V.parse(p[2]),tuple(V.parse(x) for x in p[3:])))
         else: raise LiftError("unknown record")
-    require(done and bool(blocks) and all(ops for _,ops in blocks.values()),"incomplete input")
+    require(done and bool(blocks) and all(ops or pc in nops for pc,(_,ops) in blocks.items()),"incomplete input")
     return blocks,end
 
 def lift(src, kind="clamp"):

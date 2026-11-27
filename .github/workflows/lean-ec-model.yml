@@ -171,6 +171,26 @@ jobs:
           test "$rc" = 1
           grep -E 'error:.*(decide|false)' ../../../qa-artifacts/capture-canary.log
           echo CAPTURE_ARITHMETIC_ACCEPTED | tee ../../../qa-artifacts/capture-result.txt
+      - name: Verify numeric audit and correction direction
+        if: matrix.slice == 'capture'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/ec/lift
+          python3 -m unittest -v test_audit test_lift
+          python3 audit.py fan-audit.pcode > "$RUNNER_TEMP/audit.tsv"
+          cmp audit.tsv "$RUNNER_TEMP/audit.tsv"
+          sha256sum audit.py test_audit.py fan-audit.pcode audit.tsv CorrectionDomain.lean correction.tsv ExtractFanAudit.java R17CorrectionAudit.java > ../../../qa-artifacts/audit.sha256
+          timeout 300 lean CorrectionDomain.lean | tee ../../../qa-artifacts/correction-proof.log
+          cp CorrectionDomain.lean "$RUNNER_TEMP/CorrectionFalse.lean"
+          printf '\n theorem false_direction : R17CorrectionDomain.increaseDirection 2550 65502 = false := by decide\n' >> "$RUNNER_TEMP/CorrectionFalse.lean"
+          set +e
+          timeout 300 lean "$RUNNER_TEMP/CorrectionFalse.lean" > ../../../qa-artifacts/correction-canary.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" = 1
+          grep -E 'error:.*(decide|false)' ../../../qa-artifacts/correction-canary.log
+          echo NUMERIC_AUDIT_ACCEPTED | tee ../../../qa-artifacts/audit-result.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

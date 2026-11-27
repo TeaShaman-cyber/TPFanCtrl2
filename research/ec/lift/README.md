@@ -126,3 +126,23 @@ Correction consumes previous validated measurement before next acquisition;
 the first replay initially measured the wrong phase, then corrected.
 No electrical reachability or hardware timing proof. No changes to overlay.
 Lean finite enumeration uses native_decide; concrete examples use decide.
+
+## Numeric bug-pattern screening (iteration 164)
+
+Method agreed in local-lab#289: use embedded C/C++ defect patterns to guide
+P-code inspection, then original-instruction replay and Lean. Pattern hits
+are hypotheses, not bugs or compiler identification. audit.py is a small
+local straight-line screening tool, not whole-program dataflow. Scans three
+known decoded ranges (192e6..19356, 199aa..19a08, 19d56..19daa), flags a
+16-bit subtraction reaching a signed comparison, and the specific previously
+traced wide-return-to-word store. Branches/calls kill local tracked values;
+the wide-return rule is explicitly seeded with known 192fe contract, not
+generic interprocedural inference. Known NOPs allowed only in audit parsing.
+Three candidates: known 192ee->192f2, 19d6c->19d6e, 19d82->19d8a.
+Original helper 19d7e executes 24 test inputs in guarded Ghidra emulator:
+target2550, RPM35318 -> -20, 35319 -> +25; RPM65502 -> +25 (also at target4600).
+This explains the full-cycle upward request previously observed for 65502.
+CorrectionDomain.lean projects only SUBW and signed direction, not lookup
+table or scheduler. Its universal proofs use bv_decide; direct examples
+use decide. Remaining 19d6c candidate needs separate branch/effect replay.
+No real electrical reachability, firmware patch, or deployment.

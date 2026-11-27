@@ -1,0 +1,839 @@
+RANGE 192e6 19356
+INS 192e6 2 push $0x2, R7, ra
+OP INT_SUB register:24:4 register:24:4 const:4:4
+OP STORE - const:1a1:8 register:24:4 register:20:4
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:10:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:e:2
+INS 192e8 2 MOVD R3R2,R8R7
+OP COPY register:e:4 register:4:4
+INS 192ea 2 LOADW *0x10(R3R2),R0
+OP INT_ZEXT unique:60300:4 const:10:3
+OP INT_ADD unique:60500:4 register:4:4 unique:60300:4
+OP LOAD register:0:2 const:1a1:8 unique:60500:4
+INS 192ec 2 STORW R0,*0x14(R3R2)
+OP INT_ZEXT unique:68900:4 const:14:3
+OP INT_ADD unique:68b00:4 register:4:4 unique:68900:4
+OP STORE - const:1a1:8 unique:68b00:4 register:0:2
+INS 192ee 4 BAL (RA),*0x000192fe
+OP INT_RIGHT register:20:4 const:192f2:4 const:1:4
+OP COPY register:32:4 const:192fe:4
+OP CALL - ram:192fe:4
+INS 192f2 2 STORW R0,*0x10(R8R7)
+OP INT_ZEXT unique:68900:4 const:10:3
+OP INT_ADD unique:68b00:4 register:e:4 unique:68900:4
+OP STORE - const:1a1:8 unique:68b00:4 register:0:2
+INS 192f4 2 LOADB *0xc(R8R7),R0
+OP INT_ZEXT unique:59100:4 const:c:3
+OP INT_ADD unique:59300:4 register:e:4 unique:59100:4
+OP INT_AND unique:59400:2 register:0:2 const:ff00:2
+OP LOAD unique:59500:1 const:1a1:8 unique:59300:4
+OP INT_ZEXT unique:59600:2 unique:59500:1
+OP INT_ADD register:0:2 unique:59400:2 unique:59600:2
+INS 192f6 2 ADDB $0x1,R0
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 register:0:1 const:1:1
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 register:0:1 const:1:1
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD unique:10000:1 register:0:1 const:1:1
+OP INT_AND unique:10100:2 register:0:2 const:ff00:2
+OP INT_ZEXT unique:10200:2 unique:10000:1
+OP INT_ADD register:0:2 unique:10100:2 unique:10200:2
+INS 192f8 2 STORB R0,*0xc(R8R7)
+OP INT_ZEXT unique:62a00:4 const:c:3
+OP INT_ADD unique:62c00:4 register:e:4 unique:62a00:4
+OP STORE - const:1a1:8 unique:62c00:4 register:0:1
+INS 192fa 2 popret $0x2, R7, ra
+OP LOAD register:e:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:10:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:20:4 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:4:4
+OP INT_LEFT register:32:4 register:20:4 const:1:4
+OP RETURN - register:32:4
+INS 192fc 2 NOP
+INS 192fe 2 push $0x4, R7, ra
+OP INT_SUB register:24:4 register:24:4 const:4:4
+OP STORE - const:1a1:8 register:24:4 register:20:4
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:14:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:12:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:10:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:e:2
+INS 19300 2 MOVD R3R2,R10R9
+OP COPY register:12:4 register:4:4
+INS 19302 4 LOADB *0x38(R3R2),R7
+OP INT_ZEXT unique:57c00:4 const:38:2
+OP INT_ADD unique:57e00:4 register:4:4 unique:57c00:4
+OP INT_AND unique:57f00:2 register:e:2 const:ff00:2
+OP LOAD unique:58000:1 const:1a1:8 unique:57e00:4
+OP INT_ZEXT unique:58100:2 unique:58000:1
+OP INT_ADD register:e:2 unique:57f00:2 unique:58100:2
+INS 19306 2 MOVW $-0x1,R0
+OP INT_SEXT register:0:2 const:ff:1
+INS 19308 2 CMPB $0x0,R7
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 const:0:1 register:e:1
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:e:1 const:0:1
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:e:1 const:0:1
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 1930a 2 BRge *0x00019354
+OP INT_RIGHT unique:9500:2 register:50:2 const:6:4
+OP SUBPIECE unique:9600:1 unique:9500:2 const:0:4
+OP INT_AND unique:9700:1 unique:9600:1 const:1:1
+OP INT_RIGHT unique:9800:2 register:50:2 const:7:4
+OP SUBPIECE unique:9900:1 unique:9800:2 const:0:4
+OP INT_AND unique:9a00:1 unique:9900:1 const:1:1
+OP BOOL_OR unique:9c00:1 unique:9700:1 unique:9a00:1
+OP BOOL_NEGATE unique:9d00:1 unique:9c00:1
+OP CBRANCH - ram:1930c:4 unique:9d00:1
+OP COPY register:32:4 const:19354:4
+OP BRANCH - ram:19354:4
+INS 1930c 2 MOVD $0x0,R3R2
+OP INT_SEXT register:4:4 const:0:1
+INS 1930e 2 MOVD R10R9,R5R4
+OP COPY register:8:4 register:12:4
+INS 19310 4 ADDD $0x40,R5R4
+OP INT_ZEXT unique:14100:4 const:40:3
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 unique:14100:4 register:8:4
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 unique:14100:4 register:8:4
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:8:4 register:8:4 unique:14100:4
+INS 19314 2 MOVXB R7,R0
+OP INT_SEXT register:0:2 register:e:1
+INS 19316 2 CMPW $0x0,R0
+OP INT_SEXT unique:1e300:2 const:0:1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 unique:1e300:2 register:0:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:0:2 unique:1e300:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:0:2 unique:1e300:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19318 2 BRge *0x0001932a
+OP INT_RIGHT unique:9500:2 register:50:2 const:6:4
+OP SUBPIECE unique:9600:1 unique:9500:2 const:0:4
+OP INT_AND unique:9700:1 unique:9600:1 const:1:1
+OP INT_RIGHT unique:9800:2 register:50:2 const:7:4
+OP SUBPIECE unique:9900:1 unique:9800:2 const:0:4
+OP INT_AND unique:9a00:1 unique:9900:1 const:1:1
+OP BOOL_OR unique:9c00:1 unique:9700:1 unique:9a00:1
+OP BOOL_NEGATE unique:9d00:1 unique:9c00:1
+OP CBRANCH - ram:1931a:4 unique:9d00:1
+OP COPY register:32:4 const:1932a:4
+OP BRANCH - ram:1932a:4
+INS 1931a 2 MOVW R0,R6
+OP COPY register:c:2 register:0:2
+INS 1931c 2 LOADW *0x0(R5R4),R0
+OP INT_ZEXT unique:60300:4 const:0:3
+OP INT_ADD unique:60500:4 register:8:4 unique:60300:4
+OP LOAD register:0:2 const:1a1:8 unique:60500:4
+INS 1931e 2 MOVZW R0,R1R0
+OP INT_ZEXT register:0:4 register:0:2
+INS 19320 2 ADDD R1R0,R3R2
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 register:0:4 register:4:4
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 register:0:4 register:4:4
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:4:4 register:4:4 register:0:4
+INS 19322 2 ADDW $-0x1,R6
+OP INT_SEXT unique:16000:2 const:ff:1
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 unique:16000:2 register:c:2
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 unique:16000:2 register:c:2
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:c:2 register:c:2 unique:16000:2
+INS 19324 2 ADDD $0x2,R5R4
+OP INT_SEXT unique:14500:4 const:2:1
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 unique:14500:4 register:8:4
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 unique:14500:4 register:8:4
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:8:4 register:8:4 unique:14500:4
+INS 19326 2 CMPW $0x0,R6
+OP INT_SEXT unique:1e300:2 const:0:1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 unique:1e300:2 register:c:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:c:2 unique:1e300:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:c:2 unique:1e300:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19328 2 BRne *0x0001931c
+OP INT_RIGHT unique:5200:2 register:50:2 const:6:4
+OP SUBPIECE unique:5300:1 unique:5200:2 const:0:4
+OP INT_AND unique:5400:1 unique:5300:1 const:1:1
+OP BOOL_NEGATE unique:5600:1 unique:5400:1
+OP BOOL_NEGATE unique:9d00:1 unique:5600:1
+OP CBRANCH - ram:1932a:4 unique:9d00:1
+OP COPY register:32:4 const:1931c:4
+OP BRANCH - ram:1931c:4
+INS 1932a 2 MOVXB R7,R4
+OP INT_SEXT register:8:2 register:e:1
+INS 1932c 2 MOVXW R4,R5R4
+OP INT_SEXT register:8:4 register:8:2
+INS 1932e 4 BAL (RA),*0x00031f2e
+OP INT_RIGHT register:20:4 const:19332:4 const:1:4
+OP COPY register:32:4 const:31f2e:4
+OP CALL - ram:31f2e:4
+INS 19332 2 MOVD R1R0,R8R7
+OP COPY register:e:4 register:0:4
+INS 19334 2 LOADB *0x2(R10R9),R2
+OP INT_ZEXT unique:59100:4 const:2:3
+OP INT_ADD unique:59300:4 register:12:4 unique:59100:4
+OP INT_AND unique:59400:2 register:4:2 const:ff00:2
+OP LOAD unique:59500:1 const:1a1:8 unique:59300:4
+OP INT_ZEXT unique:59600:2 unique:59500:1
+OP INT_ADD register:4:2 unique:59400:2 unique:59600:2
+INS 19336 2 MOVZB R2,R2
+OP INT_ZEXT register:4:2 register:4:1
+INS 19338 4 BAL (RA),*0x00008c66
+OP INT_RIGHT register:20:4 const:1933c:4 const:1:4
+OP COPY register:32:4 const:8c66:4
+OP CALL - ram:8c66:4
+INS 1933c 2 MOVXW R0,R1R0
+OP INT_SEXT register:0:4 register:0:2
+INS 1933e 2 MOVD R1R0,R5R4
+OP COPY register:8:4 register:0:4
+INS 19340 2 MOVD R8R7,R3R2
+OP COPY register:4:4 register:e:4
+INS 19342 4 BAL (RA),*0x00031e06
+OP INT_RIGHT register:20:4 const:19346:4 const:1:4
+OP COPY register:32:4 const:31e06:4
+OP CALL - ram:31e06:4
+INS 19346 2 ADDD R1R0,R1R0
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 register:0:4 register:0:4
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 register:0:4 register:0:4
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:0:4 register:0:4 register:0:4
+INS 19348 2 MOVD R1R0,R5R4
+OP COPY register:8:4 register:0:4
+INS 1934a 6 MOVD $0x23c34600,R3R2
+OP COPY register:4:4 const:23c34600:4
+INS 19350 4 BAL (RA),*0x00031f2e
+OP INT_RIGHT register:20:4 const:19354:4 const:1:4
+OP COPY register:32:4 const:31f2e:4
+OP CALL - ram:31f2e:4
+INS 19354 2 popret $0x4, R7, ra
+OP LOAD register:e:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:10:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:12:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:14:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:20:4 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:4:4
+OP INT_LEFT register:32:4 register:20:4 const:1:4
+OP RETURN - register:32:4
+RANGE 199aa 19a08
+INS 199aa 2 LOADW *0x10(R3R2),R1
+OP INT_ZEXT unique:60300:4 const:10:3
+OP INT_ADD unique:60500:4 register:4:4 unique:60300:4
+OP LOAD register:2:2 const:1a1:8 unique:60500:4
+INS 199ac 2 CMPW $-0x1,R1
+OP INT_SEXT unique:1e300:2 const:ff:1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 unique:1e300:2 register:2:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:2:2 unique:1e300:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:2:2 unique:1e300:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 199ae 2 BReq *0x000199dc
+OP INT_RIGHT unique:4e00:2 register:50:2 const:6:4
+OP SUBPIECE unique:4f00:1 unique:4e00:2 const:0:4
+OP INT_AND unique:5100:1 unique:4f00:1 const:1:1
+OP BOOL_NEGATE unique:9d00:1 unique:5100:1
+OP CBRANCH - ram:199b0:4 unique:9d00:1
+OP COPY register:32:4 const:199dc:4
+OP BRANCH - ram:199dc:4
+INS 199b0 4 STORB $0x0,*0xac(R3R2)
+OP INT_ZEXT unique:63d00:4 const:ac:2
+OP INT_ADD unique:63f00:4 register:4:4 unique:63d00:4
+OP STORE - const:1a1:8 unique:63f00:4 const:0:1
+INS 199b4 2 CMPW $-0x1,R1
+OP INT_SEXT unique:1e300:2 const:ff:1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 unique:1e300:2 register:2:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:2:2 unique:1e300:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:2:2 unique:1e300:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 199b6 2 BReq *0x000199d2
+OP INT_RIGHT unique:4e00:2 register:50:2 const:6:4
+OP SUBPIECE unique:4f00:1 unique:4e00:2 const:0:4
+OP INT_AND unique:5100:1 unique:4f00:1 const:1:1
+OP BOOL_NEGATE unique:9d00:1 unique:5100:1
+OP CBRANCH - ram:199b8:4 unique:9d00:1
+OP COPY register:32:4 const:199d2:4
+OP BRANCH - ram:199d2:4
+INS 199b8 4 CMPW $0x12b,R1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 const:12b:2 register:2:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:2:2 const:12b:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:2:2 const:12b:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 199bc 2 BRlo *0x000199ce
+OP INT_RIGHT unique:7900:2 register:50:2 const:6:4
+OP SUBPIECE unique:7a00:1 unique:7900:2 const:0:4
+OP INT_AND unique:7b00:1 unique:7a00:1 const:1:1
+OP BOOL_NEGATE unique:7c00:1 unique:7b00:1
+OP INT_RIGHT unique:7d00:2 register:50:2 const:2:4
+OP SUBPIECE unique:7e00:1 unique:7d00:2 const:0:4
+OP INT_AND unique:7f00:1 unique:7e00:1 const:1:1
+OP BOOL_NEGATE unique:8000:1 unique:7f00:1
+OP BOOL_AND unique:8200:1 unique:7c00:1 unique:8000:1
+OP BOOL_NEGATE unique:9d00:1 unique:8200:1
+OP CBRANCH - ram:199be:4 unique:9d00:1
+OP COPY register:32:4 const:199ce:4
+OP BRANCH - ram:199ce:4
+INS 199be 2 CBITW $0x0,0x0(R8R7)
+OP COPY unique:2ef00:4 register:e:4
+OP LOAD unique:2f100:2 const:1a1:8 unique:2ef00:4
+OP INT_LEFT unique:2f300:2 const:1:2 const:0:1
+OP INT_AND unique:2f400:2 unique:2f100:2 unique:2f300:2
+OP INT_RIGHT unique:2f600:2 unique:2f400:2 const:0:1
+OP INT_AND unique:2f700:2 register:50:2 const:ffdf:2
+OP INT_ZEXT unique:2f800:2 unique:2f600:1
+OP INT_LEFT unique:2f900:2 unique:2f800:2 const:5:4
+OP INT_OR register:50:2 unique:2f700:2 unique:2f900:2
+OP INT_NEGATE unique:2f300:2 unique:2f300:2
+OP INT_AND unique:2fb00:2 unique:2f100:2 unique:2f300:2
+OP STORE - const:1a1:8 unique:2ef00:4 unique:2fb00:2
+INS 199c0 2 MOVB $0xc,R4
+OP INT_AND unique:ec00:2 register:8:2 const:ff00:2
+OP INT_ZEXT unique:ed00:2 const:c:1
+OP INT_AND unique:ee00:2 unique:ed00:2 const:ff:2
+OP INT_OR register:8:2 unique:ec00:2 unique:ee00:2
+INS 199c2 2 MOVD R8R7,R3R2
+OP COPY register:4:4 register:e:4
+INS 199c4 4 BAL (RA),*0x000194ae
+OP INT_RIGHT register:20:4 const:199c8:4 const:1:4
+OP COPY register:32:4 const:194ae:4
+OP CALL - ram:194ae:4
+INS 199c8 4 STORB $0x0,*0xc(R8R7)
+OP INT_ZEXT unique:63d00:4 const:c:2
+OP INT_ADD unique:63f00:4 register:e:4 unique:63d00:4
+OP STORE - const:1a1:8 unique:63f00:4 const:0:1
+INS 199cc 2 popret $0x2, R7, ra
+OP LOAD register:e:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:10:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:20:4 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:4:4
+OP INT_LEFT register:32:4 register:20:4 const:1:4
+OP RETURN - register:32:4
+INS 199ce 2 SBITW $0x0,0x0(R8R7)
+OP COPY unique:3e300:4 register:e:4
+OP LOAD unique:3e500:2 const:1a1:8 unique:3e300:4
+OP INT_LEFT unique:3e700:2 const:1:2 const:0:1
+OP INT_AND unique:3e800:2 unique:3e500:2 unique:3e700:2
+OP INT_RIGHT unique:3ea00:2 unique:3e800:2 const:0:1
+OP INT_AND unique:3eb00:2 register:50:2 const:ffdf:2
+OP INT_ZEXT unique:3ec00:2 unique:3ea00:1
+OP INT_LEFT unique:3ed00:2 unique:3ec00:2 const:5:4
+OP INT_OR register:50:2 unique:3eb00:2 unique:3ed00:2
+OP INT_OR unique:3ee00:2 unique:3e500:2 unique:3e700:2
+OP STORE - const:1a1:8 unique:3e300:4 unique:3ee00:2
+INS 199d0 2 BR *0x000199c8
+OP COPY register:32:4 const:199c8:4
+OP BRANCH - ram:199c8:4
+INS 199d2 4 LOADB *0xac(R8R7),R0
+OP INT_ZEXT unique:57c00:4 const:ac:2
+OP INT_ADD unique:57e00:4 register:e:4 unique:57c00:4
+OP INT_AND unique:57f00:2 register:0:2 const:ff00:2
+OP LOAD unique:58000:1 const:1a1:8 unique:57e00:4
+OP INT_ZEXT unique:58100:2 unique:58000:1
+OP INT_ADD register:0:2 unique:57f00:2 unique:58100:2
+INS 199d6 2 CMPB $0x8,R0
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 const:8:1 register:0:1
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:0:1 const:8:1
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:0:1 const:8:1
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 199d8 2 BRlt *0x000199be
+OP INT_RIGHT unique:8b00:2 register:50:2 const:6:4
+OP SUBPIECE unique:8c00:1 unique:8b00:2 const:0:4
+OP INT_AND unique:8d00:1 unique:8c00:1 const:1:1
+OP BOOL_NEGATE unique:8e00:1 unique:8d00:1
+OP INT_RIGHT unique:8f00:2 register:50:2 const:7:4
+OP SUBPIECE unique:9000:1 unique:8f00:2 const:0:4
+OP INT_AND unique:9100:1 unique:9000:1 const:1:1
+OP BOOL_NEGATE unique:9200:1 unique:9100:1
+OP BOOL_AND unique:9400:1 unique:8e00:1 unique:9200:1
+OP BOOL_NEGATE unique:9d00:1 unique:9400:1
+OP CBRANCH - ram:199da:4 unique:9d00:1
+OP COPY register:32:4 const:199be:4
+OP BRANCH - ram:199be:4
+INS 199da 2 BR *0x000199b8
+OP COPY register:32:4 const:199b8:4
+OP BRANCH - ram:199b8:4
+INS 199dc 4 LOADB *0xac(R3R2),R0
+OP INT_ZEXT unique:57c00:4 const:ac:2
+OP INT_ADD unique:57e00:4 register:4:4 unique:57c00:4
+OP INT_AND unique:57f00:2 register:0:2 const:ff00:2
+OP LOAD unique:58000:1 const:1a1:8 unique:57e00:4
+OP INT_ZEXT unique:58100:2 unique:58000:1
+OP INT_ADD register:0:2 unique:57f00:2 unique:58100:2
+INS 199e0 2 ADDB $0x1,R0
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 register:0:1 const:1:1
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 register:0:1 const:1:1
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD unique:10000:1 register:0:1 const:1:1
+OP INT_AND unique:10100:2 register:0:2 const:ff00:2
+OP INT_ZEXT unique:10200:2 unique:10000:1
+OP INT_ADD register:0:2 unique:10100:2 unique:10200:2
+INS 199e2 4 STORB R0,*0xac(R3R2)
+OP INT_ZEXT unique:62100:4 const:ac:2
+OP INT_ADD unique:62300:4 register:4:4 unique:62100:4
+OP STORE - const:1a1:8 unique:62300:4 register:0:1
+INS 199e6 2 BR *0x000199b4
+OP COPY register:32:4 const:199b4:4
+OP BRANCH - ram:199b4:4
+INS 199e8 2 NOP
+INS 199ea 4 LOADW *0x1e(R3R2),R1
+OP INT_ZEXT unique:5f700:4 const:1e:2
+OP INT_ADD unique:5f900:4 register:4:4 unique:5f700:4
+OP LOAD register:2:2 const:1a1:8 unique:5f900:4
+INS 199ee 4 LOADW *0x20(R3R2),R0
+OP INT_ZEXT unique:5f700:4 const:20:2
+OP INT_ADD unique:5f900:4 register:4:4 unique:5f700:4
+OP LOAD register:0:2 const:1a1:8 unique:5f900:4
+INS 199f2 2 CMPW R1,R0
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 register:2:2 register:0:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:0:2 register:2:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:0:2 register:2:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 199f4 2 BRlo *0x000199f8
+OP INT_RIGHT unique:7900:2 register:50:2 const:6:4
+OP SUBPIECE unique:7a00:1 unique:7900:2 const:0:4
+OP INT_AND unique:7b00:1 unique:7a00:1 const:1:1
+OP BOOL_NEGATE unique:7c00:1 unique:7b00:1
+OP INT_RIGHT unique:7d00:2 register:50:2 const:2:4
+OP SUBPIECE unique:7e00:1 unique:7d00:2 const:0:4
+OP INT_AND unique:7f00:1 unique:7e00:1 const:1:1
+OP BOOL_NEGATE unique:8000:1 unique:7f00:1
+OP BOOL_AND unique:8200:1 unique:7c00:1 unique:8000:1
+OP BOOL_NEGATE unique:9d00:1 unique:8200:1
+OP CBRANCH - ram:199f6:4 unique:9d00:1
+OP COPY register:32:4 const:199f8:4
+OP BRANCH - ram:199f8:4
+INS 199f6 2 MOVW R1,R0
+OP COPY register:0:2 register:2:2
+INS 199f8 2 ADDW $0x1,R0
+OP INT_SEXT unique:16000:2 const:1:1
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 unique:16000:2 register:0:2
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 unique:16000:2 register:0:2
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:0:2 register:0:2 unique:16000:2
+INS 199fa 4 LOADW *0x1c(R3R2),R1
+OP INT_ZEXT unique:5f700:4 const:1c:2
+OP INT_ADD unique:5f900:4 register:4:4 unique:5f700:4
+OP LOAD register:2:2 const:1a1:8 unique:5f900:4
+INS 199fe 2 CMPW R1,R0
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 register:2:2 register:0:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:0:2 register:2:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:0:2 register:2:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19a00 2 BRhs *0x00019a04
+OP INT_RIGHT unique:8300:2 register:50:2 const:6:4
+OP SUBPIECE unique:8400:1 unique:8300:2 const:0:4
+OP INT_AND unique:8500:1 unique:8400:1 const:1:1
+OP INT_RIGHT unique:8600:2 register:50:2 const:2:4
+OP SUBPIECE unique:8700:1 unique:8600:2 const:0:4
+OP INT_AND unique:8800:1 unique:8700:1 const:1:1
+OP BOOL_OR unique:8a00:1 unique:8500:1 unique:8800:1
+OP BOOL_NEGATE unique:9d00:1 unique:8a00:1
+OP CBRANCH - ram:19a02:4 unique:9d00:1
+OP COPY register:32:4 const:19a04:4
+OP BRANCH - ram:19a04:4
+INS 19a02 2 MOVW R1,R0
+OP COPY register:0:2 register:2:2
+INS 19a04 4 STORW R0,*0x1e(R3R2)
+OP INT_ZEXT unique:68000:4 const:1e:2
+OP INT_ADD unique:68200:4 register:4:4 unique:68000:4
+OP STORE - const:1a1:8 unique:68200:4 register:0:2
+RANGE 19d56 19daa
+INS 19d56 2 push $0x4, R7, ra
+OP INT_SUB register:24:4 register:24:4 const:4:4
+OP STORE - const:1a1:8 register:24:4 register:20:4
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:14:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:12:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:10:2
+OP INT_SUB register:24:4 register:24:4 const:2:4
+OP STORE - const:1a1:8 register:24:4 register:e:2
+INS 19d58 2 MOVD R3R2,R8R7
+OP COPY register:e:4 register:4:4
+INS 19d5a 2 MOVD R5R4,R10R9
+OP COPY register:12:4 register:8:4
+INS 19d5c 4 BAL (RA),*0x00019d7e
+OP INT_RIGHT register:20:4 const:19d60:4 const:1:4
+OP COPY register:32:4 const:19d7e:4
+OP CALL - ram:19d7e:4
+INS 19d60 2 MOVW R0,R3
+OP COPY register:6:2 register:0:2
+INS 19d62 2 MOVB $0x0,R0
+OP INT_AND unique:ec00:2 register:0:2 const:ff00:2
+OP INT_ZEXT unique:ed00:2 const:0:1
+OP INT_AND unique:ee00:2 unique:ed00:2 const:ff:2
+OP INT_OR register:0:2 unique:ec00:2 unique:ee00:2
+INS 19d64 2 LOADW *0x16(R8R7),R1
+OP INT_ZEXT unique:60300:4 const:16:3
+OP INT_ADD unique:60500:4 register:e:4 unique:60300:4
+OP LOAD register:2:2 const:1a1:8 unique:60500:4
+INS 19d66 2 LOADW *0x10(R8R7),R2
+OP INT_ZEXT unique:60300:4 const:10:3
+OP INT_ADD unique:60500:4 register:e:4 unique:60300:4
+OP LOAD register:4:2 const:1a1:8 unique:60500:4
+INS 19d68 2 CMPW R1,R2
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 register:2:2 register:4:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:4:2 register:2:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:4:2 register:2:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19d6a 2 BRlo *0x00019d74
+OP INT_RIGHT unique:7900:2 register:50:2 const:6:4
+OP SUBPIECE unique:7a00:1 unique:7900:2 const:0:4
+OP INT_AND unique:7b00:1 unique:7a00:1 const:1:1
+OP BOOL_NEGATE unique:7c00:1 unique:7b00:1
+OP INT_RIGHT unique:7d00:2 register:50:2 const:2:4
+OP SUBPIECE unique:7e00:1 unique:7d00:2 const:0:4
+OP INT_AND unique:7f00:1 unique:7e00:1 const:1:1
+OP BOOL_NEGATE unique:8000:1 unique:7f00:1
+OP BOOL_AND unique:8200:1 unique:7c00:1 unique:8000:1
+OP BOOL_NEGATE unique:9d00:1 unique:8200:1
+OP CBRANCH - ram:19d6c:4 unique:9d00:1
+OP COPY register:32:4 const:19d74:4
+OP BRANCH - ram:19d74:4
+INS 19d6c 2 SUBW R2,R1
+OP INT_AND unique:1400:2 register:50:2 const:fffe:2
+OP INT_LESS unique:1300:1 register:4:2 register:2:2
+OP INT_ZEXT unique:1500:2 unique:1300:1
+OP INT_OR register:50:2 unique:1400:2 unique:1500:2
+OP INT_AND unique:1700:2 register:50:2 const:ffdf:2
+OP INT_SBORROW unique:1600:1 register:4:2 register:2:2
+OP INT_ZEXT unique:1800:2 unique:1600:1
+OP INT_LEFT unique:1900:2 unique:1800:2 const:5:4
+OP INT_OR register:50:2 unique:1700:2 unique:1900:2
+OP INT_SUB register:2:2 register:2:2 register:4:2
+INS 19d6e 4 CMPW $0xc8,R1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 const:c8:2 register:2:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:2:2 const:c8:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:2:2 const:c8:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19d72 2 BRge *0x00019d76
+OP INT_RIGHT unique:9500:2 register:50:2 const:6:4
+OP SUBPIECE unique:9600:1 unique:9500:2 const:0:4
+OP INT_AND unique:9700:1 unique:9600:1 const:1:1
+OP INT_RIGHT unique:9800:2 register:50:2 const:7:4
+OP SUBPIECE unique:9900:1 unique:9800:2 const:0:4
+OP INT_AND unique:9a00:1 unique:9900:1 const:1:1
+OP BOOL_OR unique:9c00:1 unique:9700:1 unique:9a00:1
+OP BOOL_NEGATE unique:9d00:1 unique:9c00:1
+OP CBRANCH - ram:19d74:4 unique:9d00:1
+OP COPY register:32:4 const:19d76:4
+OP BRANCH - ram:19d76:4
+INS 19d74 2 MOVB $0x1,R0
+OP INT_AND unique:ec00:2 register:0:2 const:ff00:2
+OP INT_ZEXT unique:ed00:2 const:1:1
+OP INT_AND unique:ee00:2 unique:ed00:2 const:ff:2
+OP INT_OR register:0:2 unique:ec00:2 unique:ee00:2
+INS 19d76 2 STORW R3,*0x0(R10R9)
+OP INT_ZEXT unique:68900:4 const:0:3
+OP INT_ADD unique:68b00:4 register:12:4 unique:68900:4
+OP STORE - const:1a1:8 unique:68b00:4 register:6:2
+INS 19d78 2 MOVZB R0,R0
+OP INT_ZEXT register:0:2 register:0:1
+INS 19d7a 2 popret $0x4, R7, ra
+OP LOAD register:e:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:10:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:12:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:14:2 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:2:4
+OP LOAD register:20:4 const:1a1:8 register:24:4
+OP INT_ADD register:24:4 register:24:4 const:4:4
+OP INT_LEFT register:32:4 register:20:4 const:1:4
+OP RETURN - register:32:4
+INS 19d7c 2 NOP
+INS 19d7e 2 LOADW *0x16(R3R2),R4
+OP INT_ZEXT unique:60300:4 const:16:3
+OP INT_ADD unique:60500:4 register:4:4 unique:60300:4
+OP LOAD register:8:2 const:1a1:8 unique:60500:4
+INS 19d80 2 LOADW *0x10(R3R2),R0
+OP INT_ZEXT unique:60300:4 const:10:3
+OP INT_ADD unique:60500:4 register:4:4 unique:60300:4
+OP LOAD register:0:2 const:1a1:8 unique:60500:4
+INS 19d82 2 SUBW R0,R4
+OP INT_AND unique:1400:2 register:50:2 const:fffe:2
+OP INT_LESS unique:1300:1 register:0:2 register:8:2
+OP INT_ZEXT unique:1500:2 unique:1300:1
+OP INT_OR register:50:2 unique:1400:2 unique:1500:2
+OP INT_AND unique:1700:2 register:50:2 const:ffdf:2
+OP INT_SBORROW unique:1600:1 register:0:2 register:8:2
+OP INT_ZEXT unique:1800:2 unique:1600:1
+OP INT_LEFT unique:1900:2 unique:1800:2 const:5:4
+OP INT_OR register:50:2 unique:1700:2 unique:1900:2
+OP INT_SUB register:8:2 register:8:2 register:0:2
+INS 19d84 6 MOVD $0x5807c,R2R1
+OP COPY register:2:4 const:5807c:4
+INS 19d8a 2 CMPW $0x0,R4
+OP INT_SEXT unique:1e300:2 const:0:1
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 unique:1e300:2 register:8:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:8:2 unique:1e300:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:8:2 unique:1e300:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19d8c 2 BRgt *0x00019d9c
+OP INT_RIGHT unique:6700:2 register:50:2 const:7:4
+OP SUBPIECE unique:6800:1 unique:6700:2 const:0:4
+OP INT_AND unique:6a00:1 unique:6800:1 const:1:1
+OP BOOL_NEGATE unique:9d00:1 unique:6a00:1
+OP CBRANCH - ram:19d8e:4 unique:9d00:1
+OP COPY register:32:4 const:19d9c:4
+OP BRANCH - ram:19d9c:4
+INS 19d8e 2 LOADW *0x0(R2R1),R0
+OP INT_ZEXT unique:60300:4 const:0:3
+OP INT_ADD unique:60500:4 register:2:4 unique:60300:4
+OP LOAD register:0:2 const:1a1:8 unique:60500:4
+INS 19d90 2 CMPW R0,R4
+OP INT_AND unique:2600:2 register:50:2 const:ffbf:2
+OP INT_EQUAL unique:2500:1 register:0:2 register:8:2
+OP INT_ZEXT unique:2700:2 unique:2500:1
+OP INT_LEFT unique:2800:2 unique:2700:2 const:6:4
+OP INT_OR register:50:2 unique:2600:2 unique:2800:2
+OP INT_AND unique:2a00:2 register:50:2 const:ff7f:2
+OP INT_SLESS unique:2900:1 register:8:2 register:0:2
+OP INT_ZEXT unique:2b00:2 unique:2900:1
+OP INT_LEFT unique:2c00:2 unique:2b00:2 const:7:4
+OP INT_OR register:50:2 unique:2a00:2 unique:2c00:2
+OP INT_AND unique:2e00:2 register:50:2 const:fffb:2
+OP INT_LESS unique:2d00:1 register:8:2 register:0:2
+OP INT_ZEXT unique:2f00:2 unique:2d00:1
+OP INT_LEFT unique:3000:2 unique:2f00:2 const:2:4
+OP INT_OR register:50:2 unique:2e00:2 unique:3000:2
+INS 19d92 2 BRls *0x00019d98
+OP INT_RIGHT unique:6200:2 register:50:2 const:2:4
+OP SUBPIECE unique:6300:1 unique:6200:2 const:0:4
+OP INT_AND unique:6400:1 unique:6300:1 const:1:1
+OP BOOL_NEGATE unique:6600:1 unique:6400:1
+OP BOOL_NEGATE unique:9d00:1 unique:6600:1
+OP CBRANCH - ram:19d94:4 unique:9d00:1
+OP COPY register:32:4 const:19d98:4
+OP BRANCH - ram:19d98:4
+INS 19d94 2 ADDD $0x4,R2R1
+OP INT_SEXT unique:14500:4 const:4:1
+OP INT_AND unique:100:2 register:50:2 const:fffe:2
+OP INT_CARRY unique:0:1 unique:14500:4 register:2:4
+OP INT_ZEXT unique:200:2 unique:0:1
+OP INT_OR register:50:2 unique:100:2 unique:200:2
+OP INT_AND unique:400:2 register:50:2 const:ffdf:2
+OP INT_SCARRY unique:300:1 unique:14500:4 register:2:4
+OP INT_ZEXT unique:500:2 unique:300:1
+OP INT_LEFT unique:600:2 unique:500:2 const:5:4
+OP INT_OR register:50:2 unique:400:2 unique:600:2
+OP INT_ADD register:2:4 register:2:4 unique:14500:4
+INS 19d96 2 BR *0x00019d8e
+OP COPY register:32:4 const:19d8e:4
+OP BRANCH - ram:19d8e:4
+INS 19d98 2 LOADW *0x2(R2R1),R0
+OP INT_ZEXT unique:60300:4 const:2:3
+OP INT_ADD unique:60500:4 register:2:4 unique:60300:4
+OP LOAD register:0:2 const:1a1:8 unique:60500:4
+INS 19d9a 2 JUMP RA
+OP INT_LEFT register:32:4 register:20:4 const:1:4
+OP RETURN - register:32:4
+INS 19d9c 2 MOVW $0x0,R0
+OP INT_SEXT register:0:2 const:0:1
+INS 19d9e 2 SUBW R4,R0
+OP INT_AND unique:1400:2 register:50:2 const:fffe:2
+OP INT_LESS unique:1300:1 register:8:2 register:0:2
+OP INT_ZEXT unique:1500:2 unique:1300:1
+OP INT_OR register:50:2 unique:1400:2 unique:1500:2
+OP INT_AND unique:1700:2 register:50:2 const:ffdf:2
+OP INT_SBORROW unique:1600:1 register:8:2 register:0:2
+OP INT_ZEXT unique:1800:2 unique:1600:1
+OP INT_LEFT unique:1900:2 unique:1800:2 const:5:4
+OP INT_OR register:50:2 unique:1700:2 unique:1900:2
+OP INT_SUB register:0:2 register:0:2 register:8:2
+INS 19da0 2 MOVW R0,R4
+OP COPY register:8:2 register:0:2
+INS 19da2 6 MOVD $0x58098,R2R1
+OP COPY register:2:4 const:58098:4
+INS 19da8 2 BR *0x00019d8e
+OP COPY register:32:4 const:19d8e:4
+OP BRANCH - ram:19d8e:4
+EXTRACT_PASS
