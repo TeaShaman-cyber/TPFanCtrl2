@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slice: [clamp, recovery, sample]
+        slice: [clamp, recovery, sample, decay]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -112,6 +112,12 @@ jobs:
               rows=sample.tsv
               false_prop='R17Sample.lifted 127 65535 0 0 = 384'
               ;;
+            decay)
+              file=LiftedDecay.lean
+              ir=decay.pcode
+              rows=decay.tsv
+              false_prop='R17Decay.lifted 11 0 0 500 500 500 499 2550 65534 0 0 = 500'
+              ;;
             *) exit 2 ;;
           esac
           python3 lift.py "$ir" "$rows" "$SLICE" > "$RUNNER_TEMP/$file"
@@ -129,19 +135,19 @@ jobs:
           grep -E 'error:.*(decide|false)' ../../../qa-artifacts/lift-canary.log
           echo 'LIFT_PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee ../../../qa-artifacts/lift-result.txt
       - name: Verify conditional composition
-        if: matrix.slice == 'sample'
+        if: matrix.slice == 'decay'
         shell: bash
         run: |
           set -euo pipefail
           cd research/ec/lift
           {
             echo 'import Std.Tactic.BVDecide'
-            for f in LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean; do
+            for f in LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean; do
               sed '1d; /^example : lifted /d' "$f"
             done
             cat Compose.lean
           } > "$RUNNER_TEMP/Composition.lean"
-          sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean Compose.lean > ../../../qa-artifacts/composition.sha256
+          sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean Compose.lean > ../../../qa-artifacts/composition.sha256
           timeout 300 lean "$RUNNER_TEMP/Composition.lean" | tee ../../../qa-artifacts/composition.log
           echo COMPOSITION_PROOF_ACCEPTED | tee ../../../qa-artifacts/composition-result.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

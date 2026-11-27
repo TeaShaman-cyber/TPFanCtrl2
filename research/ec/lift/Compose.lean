@@ -44,3 +44,34 @@ theorem eighth_or_less_preserves_floor (misses : BitVec 8)
 #print axioms valid_sample_preserves_floor
 #print axioms eighth_or_less_preserves_floor
 end R17Composition
+
+namespace R17DecayComposition
+def selected (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr clampPsr : BitVec 16) : BitVec 16 :=
+  R17Lift.lifted (R17Decay.lifted stage sub misses lower upper output request target rpm r0 psr) upper request clampPsr
+
+theorem missing_preserves_original_clamp (stage sub misses : BitVec 8)
+    (lower upper output request target r0 psr clampPsr : BitVec 16) :
+    selected stage sub misses lower upper output request target 65535 r0 psr clampPsr =
+    R17Lift.lifted lower upper request clampPsr := by
+  unfold selected
+  rw [R17Decay.missing_feedback]
+
+theorem eligible_decreases_output_one (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr clampPsr : BitVec 16)
+    (h : R17Decay.enabled stage sub misses lower upper output request target rpm) :
+    selected stage sub misses lower upper output request target rpm r0 psr clampPsr = lower - 1 := by
+  unfold selected
+  rw [R17Decay.progress_on_eligible_sample stage sub misses lower upper output request target rpm r0 psr h]
+  rw [R17Lift.exact_selection]
+  unfold R17Decay.enabled at h
+  unfold R17Lift.spec
+  bv_decide
+
+theorem single_high_reading_changes_output :
+    selected 11 0 0 500 500 500 499 2550 65534 0 0 0 = 499 := by decide
+
+#print axioms missing_preserves_original_clamp
+#print axioms eligible_decreases_output_one
+#print axioms single_high_reading_changes_output
+end R17DecayComposition

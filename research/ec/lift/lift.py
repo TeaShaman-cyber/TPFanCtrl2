@@ -56,11 +56,12 @@ def parse(src):
     return blocks,end
 
 def lift(src, kind="clamp"):
-    require(kind in ("clamp","recovery","sample"),"unknown slice")
+    require(kind in ("clamp","recovery","sample","decay"),"unknown slice")
     recovery=kind=="recovery"
     sample=kind=="sample"
+    decay=kind=="decay"
     blocks,end=parse(src)
-    require((min(blocks),end)==({"recovery":(0x199ea,0x19a08),"clamp":(0x19afc,0x19b12),"sample":(0x199aa,0x199e8)}[kind]),"unexpected slice")
+    require((min(blocks),end)==({"recovery":(0x199ea,0x19a08),"clamp":(0x19afc,0x19b12),"sample":(0x199aa,0x199e8),"decay":(0x3a002,0x3a07a)}[kind]),"unexpected slice")
     # Known ABI inputs; abstract memory only for two exact record offsets.
     initial={V("register",4,4):const(4,0x11454),
              V("register",8,2):E(2,"request"),
@@ -74,9 +75,13 @@ def lift(src, kind="clamp"):
         initial[V("register",14,4)]=const(4,0x11454)
         initial[V("register",0,2)]=E(2,"r0")
         mem={0x11454+0x10:E(2,"rpm"),0x11454+0xac:E(1,"misses")}
+    if decay:
+        initial[V("register",0,2)]=E(2,"r0")
+        for off,size,name in [(7,1,"stage"),(12,1,"sub"),(0xac,1,"misses"),(0x20,2,"output"),(0x16,2,"target"),(0x10,2,"rpm")]:
+            mem[0x11454+off]=E(size,name)
     def get(env,v):
         if v.space=="const": return const(v.size,v.offset)
-        if sample and v==V("register",0,1):
+        if (sample or decay) and v==V("register",0,1):
             word=get(env,V("register",0,2))
             return E(1,f"(BitVec.setWidth 8 {word.lean})")
         require(v in env,"uninitialized "+repr(v))
@@ -98,6 +103,10 @@ def lift(src, kind="clamp"):
             value=memory[0x11454+0xac].lean
             return f"((BitVec.setWidth 16 {value}) ||| ({256 if pc==0x199be else 0} : BitVec 16))"
         require(not sample or pc!=end,"sample escaped decision boundary")
+        if decay and pc==0x3a080:
+            require(writes in (0,1),"decay write count")
+            return memory[0x11454+0x1e].lean
+        require(not decay or pc!=end,"decay escaped tail")
         if pc==end:
             if recovery:
                 require(writes==1,"recovery must store floor exactly once")
@@ -112,7 +121,7 @@ def lift(src, kind="clamp"):
         if name in ("BRANCH","CBRANCH"):
             require(out is None and len(args)==(1 if name=="BRANCH" else 2),"branch arity")
             dst=args[0]
-            require(dst.space=="ram" and (sample or pc<dst.offset) and dst.offset<=end and (dst.offset in blocks or dst.offset==end),"invalid/loop branch")
+            require(dst.space=="ram" and (sample or pc<dst.offset) and (dst.offset in blocks or dst.offset==end or (decay and dst.offset==0x3a080)),"invalid/loop branch")
             yes=step(dst.offset,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes,active)
             if name=="BRANCH": return yes
             cond=get(env,args[1])
@@ -120,7 +129,7 @@ def lift(src, kind="clamp"):
             no=step(pc,idx+1,dict(env),dict(memory),writes,active)
             return f"(if {truth(cond)} then {yes} else {no})"
         if name=="STORE":
-            require((recovery or sample) and out is None and len(args)==3 and args[0]==V("const",0x1a1,8),"unsupported store")
+            require((recovery or sample or decay) and out is None and len(args)==3 and args[0]==V("const",0x1a1,8),"unsupported store")
             addr,value=get(env,args[1]),get(env,args[2])
             require(addr.size==4 and addr.known==0x11454+(0xac if sample else 0x1e) and value.size==(1 if sample else 2) and writes==0,"store outside slice contract")
             memory=dict(memory);memory[addr.known]=value
@@ -144,21 +153,21 @@ def lift(src, kind="clamp"):
                 if val >= 1<<(a[0].size*8-1): val-=1<<(a[0].size*8)
                 e=const(n,val)
             else: e=E(n,f"(BitVec.signExtend {8*n} {a[0].lean})")
-        elif name in ("INT_CARRY","INT_SCARRY"):
+        elif name in ("INT_CARRY","INT_SCARRY","INT_SBORROW"):
             require(len(a)==2 and a[0].size==a[1].size and n==1,"carry width")
             x,y=a[0].lean,a[1].lean
             if name=="INT_CARRY": b=f"(BitVec.ult ({x} + {y}) {x})"
             else:
                 sx=f"(BitVec.slt {x} 0)";sy=f"(BitVec.slt {y} 0)"
-                ss=f"(BitVec.slt ({x} + {y}) 0)"
-                b=f"(({sx} == {sy}) && ({sx} != {ss}))"
+                ss=f"(BitVec.slt ({x} {'-' if name=='INT_SBORROW' else '+'} {y}) 0)"
+                b=f"(({sx} {'!=' if name=='INT_SBORROW' else '=='} {sy}) && ({sx} != {ss}))"
             e=boolean(b)
         elif name=="SUBPIECE":
             require(len(a)==2 and a[1].known is not None and a[1].known+n<=a[0].size,"subpiece bounds")
             e=E(n,f"(BitVec.setWidth {8*n} (BitVec.ushiftRight {a[0].lean} {8*a[1].known}))")
-        elif name in ("INT_ADD","INT_AND","INT_OR"):
+        elif name in ("INT_ADD","INT_SUB","INT_AND","INT_OR"):
             require(len(a)==2 and a[0].size==a[1].size==n,"arithmetic width")
-            op={"INT_ADD":"+","INT_AND":"&&&","INT_OR":"|||"}[name]
+            op={"INT_ADD":"+","INT_SUB":"-","INT_AND":"&&&","INT_OR":"|||"}[name]
             if name=="INT_ADD" and all(x.known is not None for x in a): e=const(n,a[0].known+a[1].known)
             else: e=E(n,f"({a[0].lean} {op} {a[1].lean})")
         elif name in ("INT_LEFT","INT_RIGHT"):
@@ -177,7 +186,7 @@ def lift(src, kind="clamp"):
             require(len(a)==1 and a[0].size==n==1,"bool width")
             e=boolean(f"(!{truth(a[0])})")
         else: raise LiftError("unsupported operation "+name)
-        if sample and e.known is None:
+        if (sample or decay) and e.known is None:
             serial+=1;name=f"v{serial}"
             put(env,out,E(e.size,name))
             return f"(let {name} : BitVec {e.size*8} := {e.lean}; {step(pc,idx+1,env,memory,writes,active)})"
@@ -185,6 +194,87 @@ def lift(src, kind="clamp"):
         return step(pc,idx+1,env,memory,writes,active)
     body=step(min(blocks),0,initial,mem)
     require(visited=={(pc,i) for pc,(_,ops) in blocks.items() for i in range(len(ops)) if not sample or not 0x199be<=pc<=0x199d0},"unvisited operations")
+    if decay:
+        return """import Std.Tactic.BVDecide
+set_option warningAsError true
+set_option maxRecDepth 8192
+set_option maxHeartbeats 16000000
+namespace R17Decay
+def lifted (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16) : BitVec 16 :=
+  """+body+"""
+def enabled (stage sub misses : BitVec 8)
+    (lower upper output request target rpm : BitVec 16) : Prop :=
+  stage = 11 ∧ sub = 0 ∧ misses = 0 ∧ upper = 500 ∧
+  25 < lower ∧ lower ≤ 500 ∧ output = lower ∧ request < lower ∧
+  0 < target ∧ target ≤ 10000 ∧ rpm ≠ 65535 ∧ target + 100 < rpm
+
+def spec (stage sub misses : BitVec 8)
+    (lower upper output request target rpm : BitVec 16) : BitVec 16 :=
+  if stage = 11 ∧ sub = 0 ∧ misses = 0 ∧ upper = 500 ∧
+    25 < lower ∧ lower ≤ 500 ∧ output = lower ∧ request < lower ∧
+    0 < target ∧ target ≤ 10000 ∧ rpm ≠ 65535 ∧ target + 100 < rpm
+  then lower - 1 else lower
+
+theorem exact_decay (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16) :
+    lifted stage sub misses lower upper output request target rpm r0 psr =
+    spec stage sub misses lower upper output request target rpm := by
+  unfold lifted spec
+  bv_decide
+
+theorem missing_feedback (stage sub misses : BitVec 8)
+    (lower upper output request target r0 psr : BitVec 16) :
+    lifted stage sub misses lower upper output request target 65535 r0 psr = lower := by
+  rw [exact_decay]
+  simp [spec]
+
+theorem disabled_when_recovering (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16)
+    (h : stage ≠ 11 ∨ sub ≠ 0 ∨ misses ≠ 0) :
+    lifted stage sub misses lower upper output request target rpm r0 psr = lower := by
+  rw [exact_decay]
+  unfold spec
+  bv_decide
+
+theorem no_underspeed_decay (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16)
+    (h : rpm ≤ target) :
+    lifted stage sub misses lower upper output request target rpm r0 psr = lower := by
+  rw [exact_decay]
+  unfold spec
+  bv_decide
+
+theorem bounded_step (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16)
+    (h : 25 ≤ lower) (h2 : lower ≤ 500) :
+    25 ≤ lifted stage sub misses lower upper output request target rpm r0 psr ∧
+    (lifted stage sub misses lower upper output request target rpm r0 psr = lower ∨
+     lifted stage sub misses lower upper output request target rpm r0 psr = lower - 1) := by
+  rw [exact_decay]
+  unfold spec
+  bv_decide
+
+theorem progress_on_eligible_sample (stage sub misses : BitVec 8)
+    (lower upper output request target rpm r0 psr : BitVec 16)
+    (h : enabled stage sub misses lower upper output request target rpm) :
+    lifted stage sub misses lower upper output request target rpm r0 psr = lower - 1 := by
+  rw [exact_decay]
+  unfold enabled at h
+  simp [spec, h]
+
+-- A single high but non-sentinel value is sufficient; physical validity is external.
+theorem high_reading_counterexample : lifted 11 0 0 500 500 500 499 2550 65534 0 0 = 499 := by decide
+
+#print axioms high_reading_counterexample
+#print axioms exact_decay
+#print axioms missing_feedback
+#print axioms disabled_when_recovering
+#print axioms no_underspeed_decay
+#print axioms bounded_step
+#print axioms progress_on_eligible_sample
+end R17Decay
+"""
     if sample:
         return """import Std.Tactic.BVDecide
 set_option warningAsError true
@@ -311,9 +401,19 @@ end R17Lift
 def with_oracle(src, rows, kind="clamp"):
     out=lift(src,kind)
     examples=[]
+    if kind=="decay":
+        for line in rows.splitlines():
+            a=line.split()
+            require(len(a)==12 and all(x.isdecimal() and 0<=int(x)<=65535 for x in a),"invalid decay oracle row")
+            require(all(int(x)<=255 for x in a[:3]),"decay byte width")
+            examples.append("example : lifted "+" ".join(a[:-1])+" = "+a[-1]+" := by decide")
+        require(len(examples)==512,"incomplete decay oracle")
+        return out.replace("end R17Decay","\\n".join(examples)+"\\nend R17Decay")
     for line in rows.splitlines():
         a=line.split()
         require(len(a)==5 and all(x.isdecimal() and 0<=int(x)<=65535 for x in a),"invalid oracle row")
+        if kind=="decay":
+            raise LiftError("use decay oracle schema")
         lo,hi,req,psr,result=map(int,a)
         require(kind!="sample" or (lo<=255 and result<=511),"sample oracle width")
         examples.append(f"example : lifted {lo} {hi} {req} {psr} = {result} := by decide")

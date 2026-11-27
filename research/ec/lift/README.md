@@ -86,3 +86,21 @@ clamp returns 500. This composes the slices under the explicit assumption
 that the EC scheduler dispatches recovery after the decision and invokes
 clamp subsequently, without an intervening change of bounds. It does not
 prove scheduler reachability or entire machine behavior.
+
+## Candidate decay guard (iteration 161)
+
+The research-only overlay body at 3a002..3a07a (exclusive) is decoded from
+actual assembler bytes emitted by the prior iteration157 run. Fresh assembly
+from the unchanged R17DecayCandidate source matches those bytes. The lift
+stops at 3a080 before the original clamp call; excludes stack prologue/epilogue.
+Inputs: stage, substep, misses, lower, upper, output, request, target RPM,
+reported RPM, R0, PSR. Exactly zero or one store to the lower word. 512 original
+overlay emulator oracle cases, 216 decrement / 296 hold, including individual
+guard violations and mixed boundary values. The mathematical model tests all
+inputs, but does not model physical validity of reported RPM or scheduler
+reachability. In particular a single high non-sentinel value (e.g. 65534)
+can permit decrement if the other guards hold. This is not proof such a value
+is reachable at the real EC. Missing sentinel, nonzero misses, non-regulation
+stage/substep and reported underspeed prevent decay. The composed model checks
+the original clamp with the updated floor, not the stack/ABI or hardware
+write/call/return. No firmware deployment.

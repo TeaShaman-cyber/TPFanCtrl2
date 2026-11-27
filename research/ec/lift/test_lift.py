@@ -39,6 +39,18 @@ class TestLift(unittest.TestCase):
     def test_sample_store_width(self):
         src=Path("sample.pcode").read_text().replace("unique:62300:4 register:0:1","unique:62300:4 register:0:2")
         with self.assertRaises(LiftError): lift(src,"sample")
+    def test_decay(self):
+        src=Path("decay.pcode").read_text()
+        result=lift(src,"decay")
+        self.assertIn("theorem exact_decay",result)
+        self.assertIn("theorem missing_feedback",result)
+        self.assertEqual(result,lift(src,"decay"))
+    def test_decay_escape(self):
+        src=Path("decay.pcode").read_text().replace("ram:3a080:4","ram:3a082:4",1)
+        with self.assertRaises(LiftError): lift(src,"decay")
+    def test_decay_wrong_store(self):
+        src=Path("decay.pcode").read_text().replace("unique:68000:4 const:1e:2","unique:68000:4 const:20:2")
+        with self.assertRaises(LiftError): lift(src,"decay")
     def test_unknown(self):
         src=Path("clamp.pcode").read_text().replace("INT_ZEXT","UNSUPPORTED",1)
         with self.assertRaises(LiftError): lift(src)
