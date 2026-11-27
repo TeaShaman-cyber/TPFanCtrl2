@@ -231,3 +231,16 @@ priority.
 Recovery from firmware starts with a running step even if the curve
 requests zero. These timings are provisional, not a validated
 machine-specific temperature curve.
+
+For experimental adaptive rise timing, append an optional eighth number
+(hot rise dwell in milliseconds) before the first semicolon in the
+SmartLive or SmartShadow configuration. Omission preserves the fixed
+rise dwell. The new number must be positive and no greater than the
+ordinary rise dwell. Between recovery and urgent temperature, the
+upward demand accumulates faster, using the slower of the two adjacent
+temperature-based rates for each measured interval. A new step still
+requires contiguous upward demand and a confirmed previous command.
+Falling dwell, stopped-fan restart, and urgent/invalid-input fail-safe
+are unchanged. This is not a prediction model and does not use power as
+a control input. For example, 6000 ms ordinary and 1000 ms hot rise
+are experimental timing values, not validated hardware defaults.

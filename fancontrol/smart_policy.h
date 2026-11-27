@@ -19,6 +19,7 @@ struct Config {
 	unsigned long long rise_ms, fall_ms, max_gap_ms;
 	double urgent, recover;
 	unsigned long long recovery_ms;
+	unsigned long long hot_rise_ms; // 0 preserves fixed rise dwell
 };
 struct Sample {
 	unsigned long long time_ms;
@@ -39,7 +40,7 @@ inline bool valid_config(const Config& c) {
 	    !std::isfinite(c.hysteresis) || c.hysteresis < 0 ||
 	    !std::isfinite(c.urgent) || !std::isfinite(c.recover) ||
 	    c.recover <= 0 || c.urgent > 110 || c.recover >= c.urgent ||
-	    !c.rise_ms || c.fall_ms < c.rise_ms || !c.max_gap_ms || !c.recovery_ms)
+	    !c.rise_ms || c.hot_rise_ms > c.rise_ms || c.fall_ms < c.rise_ms || !c.max_gap_ms || !c.recovery_ms)
 		return false;
 	for (std::size_t i = 0; i < c.curve.size(); ++i) {
 		const auto& p = c.curve[i];
@@ -89,6 +90,7 @@ public:
 			reset();
 			return hold();
 		}
+		const auto elapsed = have_time_ && s.time_ms > last_time_ ? s.time_ms-last_time_ : 0;
 		const bool discontinuity = have_time_ &&
 		    (s.time_ms <= last_time_ || s.time_ms-last_time_ > config_.max_gap_ms);
 		last_time_ = s.time_ms;
@@ -161,10 +163,25 @@ public:
 		if (direction < 0 && s.level == 1 && steps.front().level == 0 &&
 		    s.temperature >= config_.recover)
 			direction = 0;
+		// Accumulate only consecutive intervals of upward demand. Use the
+		// slower endpoint rate so a single hot reading cannot credit the past.
+		double rate = 1.0 / static_cast<double>(config_.rise_ms);
+		if (config_.hot_rise_ms && s.temperature > config_.recover) {
+			const double fraction = (s.temperature-config_.recover)/(config_.urgent-config_.recover);
+			rate += fraction*(1.0/static_cast<double>(config_.hot_rise_ms)-rate);
+		}
 		if (!direction || direction != direction_) {
 			direction_ = direction;
+			rise_credit_=0;
+			last_rate_=rate;
 			since_ = s.time_ms;
 			return hold();
+		}
+		if (direction > 0 && config_.hot_rise_ms) {
+			rise_credit_ += static_cast<double>(elapsed)*(rate < last_rate_ ? rate : last_rate_);
+			last_rate_=rate;
+			if (rise_credit_ < 1.0-1e-9) return hold();
+			return request(s.level+1,s.time_ms);
 		}
 		// Stopping is more expensive than ordinary downward steps.
 		const auto dwell = direction < 0 && s.level == 1 && steps.front().level == 0 && config_.fall_ms < 30000
@@ -191,6 +208,7 @@ private:
 	}
 	Config config_;
 	bool configured_, have_time_ = false, firmware_ = false, recovering_ = false;
+	double rise_credit_=0, last_rate_=0;
 	int last_level_ = -1, direction_ = 0, pending_ = -1;
 	unsigned long long last_time_ = 0, since_ = 0, pending_since_ = 0;
 };

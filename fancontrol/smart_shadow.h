@@ -12,9 +12,15 @@ inline bool parse_shadow_config(const std::string& line, Config& result) {
 	Config c{};
 	long long rise, fall, gap, recovery;
 	char separator;
-	if (!(input >> c.hysteresis >> rise >> fall >> gap >> c.urgent >> c.recover >> recovery >> separator) ||
-	    separator != ';' || rise <= 0 || fall <= 0 || gap <= 0 || recovery <= 0)
+	if (!(input >> c.hysteresis >> rise >> fall >> gap >> c.urgent >> c.recover >> recovery) || rise <= 0 || fall <= 0 || gap <= 0 || recovery <= 0)
 		return false;
+	input >> std::ws;
+	if (input.peek() != ';') {
+		long long hot;
+		if (!(input >> hot) || hot <= 0 || hot > rise) return false;
+		c.hot_rise_ms=static_cast<unsigned long long>(hot);
+	}
+	if (!(input >> separator) || separator != ';') return false;
 	c.rise_ms = static_cast<unsigned long long>(rise);
 	c.fall_ms = static_cast<unsigned long long>(fall);
 	c.max_gap_ms = static_cast<unsigned long long>(gap);

@@ -37,4 +37,10 @@ int main() {
     Shadow zero;
     assert(zero.configure("100 3000 10000 2000 85 70 5000 ; 55 0 65 2000 80 5000 ; 0 0 1 2000 2 3000 3 4000 4 5000"));
     assert(zero.observe(1000,45,0,true).projected==0);
+    Config adaptive{};
+    assert(parse_shadow_config(line,adaptive)&&adaptive.hot_rise_ms==0);
+    assert(parse_shadow_config("100 6000 12000 2000 85 70 5000 1000 ; 40 2000 80 5000 ; 1 2000 2 3000 3 4000 4 5000",adaptive));
+    assert(adaptive.hot_rise_ms==1000);
+    assert(!parse_shadow_config("100 6000 12000 2000 85 70 5000 -1 ; 40 2000 80 5000 ; 1 2000 2 3000 3 4000 4 5000",adaptive));
+    assert(!parse_shadow_config("100 6000 12000 2000 85 70 5000 7000 ; 40 2000 80 5000 ; 1 2000 2 3000 3 4000 4 5000",adaptive));
 }

@@ -6,7 +6,7 @@ using namespace smart_policy;
 static Config config() {
     // Synthetic policy inputs, deliberately not an L14 deployment profile.
     return Config{{{40, 2000}, {80, 5000}}, {{1, 2000}, {2, 3000}, {3, 4000}, {4, 5000}},
-                  100, 3000, 10000, 2000, 85, 70, 5000};
+                  100, 3000, 10000, 2000, 85, 70, 5000, 0};
 }
 static Sample sample(unsigned long long t, double temp, int level = 1,
                      bool ack = true, bool valid = true, bool smart = true) {
@@ -129,4 +129,25 @@ int main() {
     Policy keep_running(permissive);
     for(unsigned t=0;t<=40000;t+=1000)
         assert(keep_running.evaluate(sample(t,72,1)).kind==Kind::Hold);
+    Config adaptive=cfg;
+    adaptive.hot_rise_ms=1000;
+    adaptive.rise_ms=6000;
+    assert(valid_config(adaptive));
+    Policy spike(adaptive);
+    assert(spike.evaluate(sample(0,70)).kind==Kind::Hold);
+    assert(spike.evaluate(sample(1000,84)).kind==Kind::Hold);
+    assert(spike.evaluate(sample(2000,40)).kind==Kind::Hold);
+    Policy hot(adaptive);
+    assert(hot.evaluate(sample(0,84)).kind==Kind::Hold);
+    assert(hot.evaluate(sample(1000,84)).kind==Kind::Hold);
+    a=hot.evaluate(sample(2000,84));
+    assert(a.kind==Kind::Level&&a.level==2);
+    assert(hot.evaluate(sample(2500,84,2)).kind==Kind::Hold);
+    assert(hot.evaluate(sample(3000,84,2)).kind==Kind::Hold);
+    assert(hot.evaluate(sample(3500,85,2)).kind==Kind::Firmware);
+    Policy mild(adaptive);
+    for(unsigned t=0;t<6000;t+=1000)
+        assert(mild.evaluate(sample(t,65)).kind==Kind::Hold);
+    assert(mild.evaluate(sample(6000,65)).kind==Kind::Level);
+    adaptive.hot_rise_ms=7000;assert(!valid_config(adaptive));
 }
