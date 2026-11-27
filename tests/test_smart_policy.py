@@ -297,6 +297,20 @@ int main(){
     assert(f.message.find("set_ok=-1")!=std::string::npos);
     assert(f.message.find("gap_ms=2640")!=std::string::npos);
     assert(f.message.find("idle=1000 start=10 ec=1615 msr=5 queue=5 handler=5")!=std::string::npos);
+    // Repeated valid gaps cause no BIOS write, including with rising demand.
+    f.SmartLive.reset(); f.message.clear(); f.CpuMsrFrame.package=40; f.CpuMsrFrame.hottest=40;
+    for(tick=20000;tick<=48280;tick+=2828){
+        f.CpuMsrFrame.time_ms=tick;
+        assert(f.SmartLiveControl() && f.writes==3);
+    }
+    f.CpuMsrFrame.package=77; f.CpuMsrFrame.hottest=77;
+    f.CpuMsrFrame.time_ms=tick;
+    assert(f.SmartLiveControl() && f.writes==3);
+    tick+=2640; f.CpuMsrFrame.time_ms=tick;
+    assert(f.SmartLiveControl() && f.writes==4 && f.requested==2);
+    assert(f.message.find("reason=late_rise")!=std::string::npos);
+    assert(f.message.find("request=128")==std::string::npos);
+
 
 }
 '''

@@ -59,7 +59,29 @@ int main() {
     a=gap.evaluate(sample(2640,69));
     assert(a.kind==Kind::Hold && a.reason==Reason::PollGapReanchor);
     assert(gap.evaluate(sample(3640,69)).kind==Kind::Hold);
-    assert(gap.evaluate(sample(6468,77)).kind==Kind::Firmware); // repeated gap before healthy window
+    assert(gap.evaluate(sample(6468,77)).kind==Kind::Level); // repeated late upward demand without reversal
+    Policy quiet_gaps(cfg);
+    assert(quiet_gaps.evaluate(sample(0,40)).kind==Kind::Hold);
+    for(unsigned t=2828;t<=28280;t+=2828)
+        assert(quiet_gaps.evaluate(sample(t,40)).kind==Kind::Hold);
+    Policy repeated_hot(cfg);
+    assert(repeated_hot.evaluate(sample(0,79)).kind==Kind::Hold);
+    assert(repeated_hot.evaluate(sample(2640,79)).kind==Kind::Hold);
+    a=repeated_hot.evaluate(sample(5468,79));
+    assert(a.kind==Kind::Level && a.level==2);
+    assert(repeated_hot.evaluate(sample(8296,79,2)).kind==Kind::Hold);
+    assert(repeated_hot.evaluate(sample(11124,79,2)).kind==Kind::Hold);
+    a=repeated_hot.evaluate(sample(13952,79,2));
+    assert(a.kind==Kind::Level && a.level==3);
+    Policy isolated_spike(cfg);
+    assert(isolated_spike.evaluate(sample(0,40)).kind==Kind::Hold);
+    assert(isolated_spike.evaluate(sample(2640,84)).kind==Kind::Hold);
+    assert(isolated_spike.evaluate(sample(5468,40)).kind==Kind::Hold);
+    assert(isolated_spike.evaluate(sample(8296,84)).kind==Kind::Hold);
+    Policy never_down_on_gaps(cfg);
+    assert(never_down_on_gaps.evaluate(sample(0,40,4)).kind==Kind::Hold);
+    for(unsigned t=2828;t<=28280;t+=2828)
+        assert(never_down_on_gaps.evaluate(sample(t,40,4)).kind==Kind::Hold);
     Policy drift(cfg);
     drift.evaluate(sample(0,60));
     assert(drift.evaluate(sample(2640,60,2)).kind==Kind::Firmware);
@@ -68,7 +90,7 @@ int main() {
     assert(boundary.evaluate(sample(4000,40)).reason==Reason::PollGapReanchor);
     Policy huge_gap(cfg);
     huge_gap.evaluate(sample(0,60));
-    assert(huge_gap.evaluate(sample(4001,60)).kind==Kind::Firmware);
+    assert(huge_gap.evaluate(sample(4001,60)).reason==Reason::PollGapReanchor);
     Policy later(cfg);
     later.evaluate(sample(0,60));
     assert(later.evaluate(sample(2828,77)).kind==Kind::Hold);
@@ -90,6 +112,44 @@ int main() {
     for(unsigned t=11640;t<21640;t+=1000)
         assert(down_gap.evaluate(sample(t,40,4)).kind==Kind::Hold);
     assert(down_gap.evaluate(sample(21640,40,4)).kind==Kind::Level);
+    // Experimental host fault strategy: the chosen fixed level is a
+    // test fixture, not a proven physical emergency cooling setpoint.
+    Policy host(cfg,4);
+    a=host.evaluate(sample(1000,85,1));
+    assert(a.kind==Kind::Level && a.level==4 && a.reason==Reason::UrgentTemperature);
+    assert(host.evaluate(sample(2000,88,4)).kind==Kind::Hold);
+    assert(host.evaluate(sample(3000,0,4,true,false)).kind==Kind::Hold);
+    for(unsigned t=4000;t<=9000;t+=1000)
+        assert(host.evaluate(sample(t,40,4)).kind==Kind::Hold);
+    // Fault recovery retains the high step; ordinary down dwell starts anew.
+    for(unsigned t=10000;t<20000;t+=1000)
+        assert(host.evaluate(sample(t,40,4)).kind==Kind::Hold);
+    a=host.evaluate(sample(20000,40,4));
+    assert(a.kind==Kind::Level && a.level==3);
+    Policy stale_host(cfg,4);
+    a=stale_host.evaluate(sample(1000,40,1,true,false));
+    assert(a.kind==Kind::Level && a.level==4 && a.reason==Reason::InvalidInput);
+    Policy stopped_host(cfg,4);
+    a=stopped_host.evaluate(sample(1000,85,0));
+    assert(a.kind==Kind::Level && a.level==4);
+    Policy more_cooling(cfg,4);
+    assert(more_cooling.evaluate(sample(1000,85,7)).kind==Kind::Hold);
+    assert(more_cooling.evaluate(sample(2000,0,7,true,false)).kind==Kind::Hold);
+    Policy retry_host(cfg,4);
+    assert(retry_host.evaluate(sample(1000,85,1)).kind==Kind::Level);
+    assert(retry_host.evaluate(sample(1100,85,1,false)).kind==Kind::Hold);
+    a=retry_host.evaluate(sample(3000,85,1,false));
+    assert(a.kind==Kind::Firmware && a.reason==Reason::PendingTimeout);
+    assert(retry_host.evaluate(sample(4000,88,128)).kind==Kind::Hold);
+    assert(retry_host.evaluate(sample(5000,0,128,true,false)).kind==Kind::Hold);
+    Policy host_gap(cfg,4);
+    assert(host_gap.evaluate(sample(1000,85,1)).kind==Kind::Level);
+    assert(host_gap.evaluate(sample(2000,40,4)).kind==Kind::Hold);
+    assert(host_gap.evaluate(sample(6000,40,4)).kind==Kind::Hold);
+    for(unsigned t=7000;t<=12000;t+=1000)
+        assert(host_gap.evaluate(sample(t,40,4)).kind==Kind::Hold);
+    Policy bad_host(cfg,2);
+    assert(bad_host.evaluate(sample(1000,85,1)).kind==Kind::Firmware);
     Policy gap_hot(cfg);
     gap_hot.evaluate(sample(0,60));
     assert(gap_hot.evaluate(sample(2640,85)).reason==Reason::UrgentTemperature);
@@ -103,6 +163,10 @@ int main() {
     for(unsigned t=0;t<3000;t+=1000)gap_pending.evaluate(sample(t,79));
     assert(gap_pending.evaluate(sample(3000,79)).kind==Kind::Level);
     assert(gap_pending.evaluate(sample(5640,79,1,false)).kind==Kind::Firmware);
+    Policy late_ack(cfg);
+    for(unsigned t=0;t<3000;t+=1000)late_ack.evaluate(sample(t,79));
+    assert(late_ack.evaluate(sample(3000,79)).kind==Kind::Level);
+    assert(late_ack.evaluate(sample(5640,79,2)).kind==Kind::Hold);
     Policy gap_bios(cfg);
     gap_bios.evaluate(sample(0,60,128));
     gap_bios.evaluate(sample(1000,60,128));
@@ -166,7 +230,8 @@ int main() {
     assert(a.kind==Kind::Level && a.level==1);
     Policy gap_zero(passive);
     gap_zero.evaluate(sample(0,45,0));
-    assert(gap_zero.evaluate(sample(2640,45,0)).kind==Kind::Firmware);
+    a=gap_zero.evaluate(sample(2640,45,0));
+    assert(a.kind==Kind::Level && a.level==1); // cannot assume stopped fan safe across missing interval
     Policy urgent(passive);
     assert(urgent.evaluate(sample(0,85,0)).kind==Kind::Firmware);
     Config bad_zero=passive;bad_zero.calibration[0].rpm=10;

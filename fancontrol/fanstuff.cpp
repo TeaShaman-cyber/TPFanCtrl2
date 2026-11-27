@@ -485,6 +485,7 @@ bool FANCONTROL::SmartLiveControl() {
 	    static_cast<unsigned char>(this->State.FanCtrl));
 	this->Trace(msg);
 	if (action.reason == smart_policy::Reason::PollGapReanchor ||
+	    action.reason == smart_policy::Reason::LateRise ||
 	    action.reason == smart_policy::Reason::PollDiscontinuity) {
 		const auto& p = this->SmartPoll;
 		const auto previous = input.now-input.gap;

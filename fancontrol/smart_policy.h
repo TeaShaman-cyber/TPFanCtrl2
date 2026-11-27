@@ -31,7 +31,7 @@ struct Sample {
 };
 enum class Kind { Hold, Level, Firmware };
 enum class Reason {
-    None, InvalidConfig, InvalidInput, UrgentTemperature, PollDiscontinuity, PollGapReanchor,
+    None, InvalidConfig, InvalidInput, UrgentTemperature, PollDiscontinuity, PollGapReanchor, LateRise,
     PendingTimeout, PendingMismatch, FirmwareUnconfirmed, UnconfirmedLevel,
     LevelOutsideCalibration, Recovery, Restart, RiseDwell, FallDwell
 };
@@ -42,6 +42,7 @@ inline const char* reason_name(Reason reason) {
     case Reason::UrgentTemperature: return "urgent_temperature";
     case Reason::PollDiscontinuity: return "poll_discontinuity";
     case Reason::PollGapReanchor: return "poll_gap_reanchor";
+    case Reason::LateRise: return "late_rise";
     case Reason::PendingTimeout: return "pending_timeout";
     case Reason::PendingMismatch: return "pending_mismatch";
     case Reason::FirmwareUnconfirmed: return "firmware_unconfirmed";
@@ -102,11 +103,18 @@ inline double target_rpm(const Config& c, double temperature) {
 
 class Policy {
 public:
-	explicit Policy(const Config& c) : config_(c), configured_(valid_config(c)) {}
+	// A nonzero emergency level is an offline experimental choice, not
+	// a certified hardware setpoint. The existing live adapter uses zero.
+	explicit Policy(const Config& c, int emergency_level=0) : config_(c),
+	    configured_(valid_config(c) && (emergency_level == 0 ||
+	        (emergency_level >= c.calibration.back().level && emergency_level <= 7))),
+	    emergency_level_(emergency_level) {}
 	void reset() {
 		have_time_ = false;
 		last_gap_ = 0;
-		grace_used_ = false;
+		late_up_ = false;
+		fault_ = false;
+		fault_lost_ = false;
 		last_level_ = -1;
 		direction_ = 0;
 		pending_ = -1;
@@ -126,30 +134,13 @@ public:
 		last_gap_ = elapsed;
 		have_time_ = true;
 		if (!configured_) return handback(s, Reason::InvalidConfig);
-		if (!s.valid || !std::isfinite(s.temperature) || s.temperature <= 0)
-			return handback(s, Reason::InvalidInput);
-		if (s.temperature >= config_.urgent) return handback(s, Reason::UrgentTemperature);
+		const bool thermal_valid = s.valid && std::isfinite(s.temperature) && s.temperature > 0;
+		const auto thermal_reason = !thermal_valid ? Reason::InvalidInput :
+		    s.temperature >= config_.urgent ? Reason::UrgentTemperature : Reason::None;
+		if (emergency_level_ && !fault_lost_ && (fault_ || thermal_reason != Reason::None))
+			return host_fault(s, thermal_reason, late, nonmonotonic);
+		if (thermal_reason != Reason::None) return handback(s, thermal_reason);
 		if (nonmonotonic) return handback(s, Reason::PollDiscontinuity);
-		if (late) {
-			// A fresh sample after one bounded scheduling delay is not a
-			// failed thermal read. Only a confirmed running calibrated fan
-			// may hold, with no pending command and no dwell credit.
-			if (!grace_used_ && elapsed-config_.max_gap_ms <= config_.max_gap_ms &&
-			    !firmware_ && pending_ == -1 && s.acknowledged && s.level > 0 &&
-			    s.level == last_level_ &&
-			    s.level >= config_.calibration.front().level &&
-			    s.level <= config_.calibration.back().level) {
-				grace_used_ = true;
-				grace_since_ = s.time_ms;
-				direction_ = 0;
-				rise_credit_ = 0;
-				since_ = s.time_ms;
-				return {Kind::Hold, -1, Reason::PollGapReanchor};
-			}
-			return handback(s, Reason::PollDiscontinuity);
-		}
-		if (grace_used_ && s.time_ms-grace_since_ >= config_.recovery_ms)
-			grace_used_ = false;
 		if (pending_ != -1) {
 			if (!s.acknowledged) {
 				if (s.time_ms-pending_since_ >= config_.max_gap_ms)
@@ -162,11 +153,18 @@ public:
 			direction_ = 0;
 			last_level_ = s.level;
 			firmware_ = false;
+			fault_lost_ = false;
+			late_up_ = false;
+			if (late) return {Kind::Hold, -1, Reason::PollGapReanchor};
 		}
 		if (firmware_ || s.level == 128) {
 			firmware_ = true;
 			if (s.level != 128 || !s.acknowledged)
 				return handback(s, Reason::FirmwareUnconfirmed);
+			if (late) {
+				recovering_ = false;
+				return {Kind::Hold, -1, Reason::PollGapReanchor};
+			}
 			if (s.temperature > config_.recover) {
 				recovering_ = false;
 				return hold();
@@ -196,10 +194,13 @@ public:
 			return handback(s, Reason::LevelOutsideCalibration);
 		// A stopped fan takes time to spin up. Restart at the recovery
 		// threshold without waiting for the ordinary rise dwell.
-		if (s.level == 0 && s.temperature >= config_.recover)
+		if (s.level == 0 && (late || s.temperature >= config_.recover))
 			return request(1, s.time_ms, Reason::Restart);
 		const int index = s.level-config_.calibration.front().level;
 		if (s.level != last_level_) {
+			if (late && last_level_ != -1)
+				return handback(s, Reason::PollDiscontinuity);
+			late_up_ = false;
 			direction_ = 0;
 			last_level_ = s.level;
 		}
@@ -215,6 +216,22 @@ public:
 		if (direction < 0 && s.level == 1 && steps.front().level == 0 &&
 		    s.temperature >= config_.recover)
 			direction = 0;
+		// A late but valid observation is not a transport or thermal failure.
+		// Do not credit unobserved time in either direction. Two late
+		// observations of upward demand, without an intervening reversal or
+		// level change, may advance one confirmed adjacent step. This prevents
+		// frequent timing gaps from indefinitely starving cooling.
+		if (direction <= 0) late_up_ = false;
+		if (late) {
+			direction_ = 0;
+			rise_credit_ = 0;
+			since_ = s.time_ms;
+			if (direction > 0) {
+				if (late_up_) return request(s.level+1,s.time_ms,Reason::LateRise);
+				late_up_ = true;
+			}
+			return {Kind::Hold, -1, Reason::PollGapReanchor};
+		}
 		// Accumulate only consecutive intervals of upward demand. Use the
 		// slower endpoint rate so a single hot reading cannot credit the past.
 		double rate = 1.0 / static_cast<double>(config_.rise_ms);
@@ -244,10 +261,59 @@ public:
 	}
 private:
 	static Action hold() { return {Kind::Hold, -1}; }
+	Action host_fault(const Sample& s, Reason thermal_reason, bool late, bool nonmonotonic) {
+		if (!fault_) {
+			fault_ = true;
+			firmware_ = false;
+			recovering_ = false;
+			pending_ = -1;
+			direction_ = 0;
+			late_up_ = false;
+			rise_credit_ = 0;
+		}
+		if (nonmonotonic) return handback(s, Reason::PollDiscontinuity);
+		if (pending_ != -1) {
+			if (!s.acknowledged) {
+				recovering_ = false;
+				if (s.time_ms-pending_since_ >= config_.max_gap_ms)
+					return handback(s, Reason::PendingTimeout);
+				return hold();
+			}
+			if (s.level != pending_) return handback(s, Reason::PendingMismatch);
+			pending_ = -1;
+		}
+		// Never intentionally reduce cooling in the fault state, even if a
+		// higher regulated level was already selected. A control-byte
+		// acknowledgement is not proof of physical cooling effectiveness.
+		if (!s.acknowledged || s.level < emergency_level_ || s.level > 7) {
+			recovering_ = false;
+			return request(emergency_level_,s.time_ms,
+			    thermal_reason == Reason::None ? Reason::UnconfirmedLevel : thermal_reason);
+		}
+		if (thermal_reason != Reason::None || s.temperature > config_.recover || late) {
+			recovering_ = false;
+			return hold();
+		}
+		if (!recovering_) {
+			recovering_ = true;
+			since_ = s.time_ms;
+			return hold();
+		}
+		if (s.time_ms-since_ < config_.recovery_ms) return hold();
+		fault_ = false;
+		recovering_ = false;
+		direction_ = 0;
+		last_level_ = s.level;
+		// Return to the calibrated domain only after guarded recovery.
+		if (s.level > config_.calibration.back().level)
+			return request(config_.calibration.back().level,s.time_ms,Reason::Recovery);
+		return hold();
+	}
 	Action handback(const Sample& s, Reason reason) {
+		if (fault_) fault_lost_ = true;
+		fault_ = false;
 		firmware_ = true;
-		grace_used_ = true;
-		grace_since_ = s.time_ms;
+		late_up_ = false;
 		recovering_ = false;
 		direction_ = 0;
 		pending_ = -1;
@@ -256,14 +322,18 @@ private:
 	}
 	Action request(int level, unsigned long long time, Reason reason) {
 		pending_ = level;
+		late_up_ = false;
 		pending_since_ = time;
 		direction_ = 0;
 		return {Kind::Level, level, reason};
 	}
 	Config config_;
-	bool configured_, have_time_ = false, firmware_ = false, recovering_ = false, grace_used_ = false;
+	bool configured_;
+	int emergency_level_;
+	bool fault_ = false, fault_lost_ = false;
+	bool have_time_ = false, firmware_ = false, recovering_ = false, late_up_ = false;
 	double rise_credit_=0, last_rate_=0;
 	int last_level_ = -1, direction_ = 0, pending_ = -1;
-	unsigned long long last_gap_ = 0, grace_since_ = 0, last_time_ = 0, since_ = 0, pending_since_ = 0;
+	unsigned long long last_gap_ = 0, last_time_ = 0, since_ = 0, pending_since_ = 0;
 };
 } // namespace smart_policy

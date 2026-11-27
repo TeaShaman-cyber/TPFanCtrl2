@@ -119,3 +119,26 @@ The revised authority requirements above are not yet implemented or accepted.
 Integration, candidate CI and hardware acceptance remain separate. Additional objective: reduce needless
 fan revolutions and airflow exposure as wear/dust proxies; neither is a
 validated bearing-lifetime or dust-accumulation model.
+
+### Iteration 140 experimental implementation
+
+A fresh validated frame after a late poll no longer causes a BIOS handback
+solely for lateness. No missing interval contributes to rise/fall dwell.
+Two late observations of upward demand with no intervening reversal or
+level change permit an adjacent increase; this evidence-count rule is
+provisional, not a measured timing optimum. Cooling downward requires
+continuous ordinary dwell. A late observation of a stopped fan requests
+restart. Unconfirmed commands, actual invalid inputs, nonmonotonic time
+and unexpected level changes are separate faults.
+
+The pure Policy constructor also supports an explicitly selected regulated
+emergency level (nonzero, at least the top calibration step, at most 7)
+for offline comparison. It requests high cooling immediately on invalid
+or urgent thermal input, latches it through the valid cool recovery
+window and restarts normal down dwell afterward. Failed confirmation
+remains a separate loss-of-authority path; existing fallback is retained
+there, not evidence that firmware is reliable. The Live and Shadow
+adapters intentionally do not enable this experimental argument. Physical
+emergency setpoint adequacy, transport-loss semantics, and hardware
+acceptance remain open. No live emergency behavior is changed by this
+prototype.
