@@ -1391,6 +1391,16 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 		this->Trace(buf);
 		this->ReadErrorCount++;
 
+		// An active Smart policy may have stopped the fan. Do not wait for
+		// the legacy error budget before attempting to return control.
+		if (!g_clientMode && this->ActiveMode && this->SingleFan &&
+		    this->SmartLive.enabled() && !this->isPowerSuspendState &&
+		    !this->restorePending && this->ReadErrorCount <= this->MaxReadErrors &&
+		    (this->CurrentMode == 2 || (this->CurrentMode == 1 && this->FanCommandPending))) {
+			this->ModeToDialog(1);
+			this->SetFan("SmartLive EC read failure", 0x80);
+		}
+
 		// after so many consecutive read errors, try to switch back to bios mode
 		if (this->ReadErrorCount > this->MaxReadErrors) {
 			this->ModeToDialog(1);

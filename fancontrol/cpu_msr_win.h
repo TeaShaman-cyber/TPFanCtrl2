@@ -22,6 +22,7 @@ public:
     }
     bool open(const wchar_t* file) {
         close();
+        if(GetActiveProcessorGroupCount()!=1)return false;
         int cp[4]{};
         __cpuid(cp,0);
         if (cp[0]<6 || cp[1]!=0x756e6547 || cp[3]!=0x49656e69 || cp[2]!=0x6c65746e) return false;
@@ -78,8 +79,8 @@ public:
             if(t>frame.hottest)frame.hottest=t;
             first=false;
         }
-        frame.time_ms=GetTickCount64();
-        if(first||frame.time_ms-start>250){energy_.reset();return Frame{};}
+        frame.time_ms=start;
+        if(first||GetTickCount64()-start>250){energy_.reset();return Frame{};}
         frame.valid=true;
         if(energy_time)
             frame.power_valid=energy_.update(energy_time,static_cast<uint32_t>(count),static_cast<unsigned>((units>>8)&31),frame.watts);

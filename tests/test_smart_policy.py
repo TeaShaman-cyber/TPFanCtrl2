@@ -269,3 +269,56 @@ int main(){
     subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                     "-I", str(root / "fancontrol"), str(code), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
+
+
+def test_live_read_failure_attempts_immediate_handback(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "fancontrol/fancontrol.cpp").read_text(encoding="utf-8-sig")
+    block = source.split("ULONG FANCONTROL::OnNewData(WPARAM mp1)", 1)[1]
+    block = block.split("else {\n\t\tthis->SmartShadow.reset();", 1)[1].split("\n\treturn 0;", 1)[0]
+    harness = r'''
+#include <cassert>
+#include <cstdio>
+#define sprintf_s std::snprintf
+bool g_clientMode=false;
+void SharedState_MarkTachStale(){}
+void Sleep(int){}
+constexpr int WM_ENDSESSION=1;
+void SendMessage(int,int,int,int){}
+struct Controller {
+    bool ActiveMode=true, SingleFan=true, isPowerSuspendState=false, restorePending=false;
+    bool FanCommandPending=false, success=true;
+    int CurrentMode=2, ReadErrorCount=0, MaxReadErrors=10, hwndDialog=0, writes=0, mode=2;
+    struct Policy {bool on=true; bool enabled(){return on;} void reset(){}} SmartLive,SmartShadow;
+    void Trace(const char*){}
+    void ModeToDialog(int m){mode=m;}
+    bool SetFan(const char*,int level){assert(level==128);++writes;FanCommandPending=!success;return success;}
+    void fail(){bool ok=false; if(false){} else {this->SmartShadow.reset();
+'''
+    main = r'''
+    }
+};
+int main(){
+ Controller a; a.fail(); assert(a.writes==1 && a.mode==1);
+ Controller b; b.success=false; b.fail(); assert(b.writes==1 && b.FanCommandPending);
+ b.CurrentMode=1; b.success=true; b.fail(); assert(b.writes==2 && !b.FanCommandPending);
+ Controller c; c.CurrentMode=3; c.fail(); assert(c.writes==0);
+ Controller d; d.SmartLive.on=false; d.fail(); assert(d.writes==0);
+ Controller e; e.isPowerSuspendState=true; e.fail(); assert(e.writes==0);
+ Controller f; f.restorePending=true; f.fail(); assert(f.writes==0);
+ Controller g; g_clientMode=true; g.fail(); assert(g.writes==0);
+}
+'''
+    code=tmp_path/"read-failure.cpp"
+    code.write_text(harness+block+main)
+    exe=tmp_path/"read-failure"
+    subprocess.run(["g++","-std=c++11","-Wall","-Wextra","-Werror","-pedantic",str(code),"-o",str(exe)],check=True)
+    subprocess.run([str(exe)],check=True)
+
+
+def test_msr_reader_ages_from_start_and_rejects_multiple_groups():
+    root=Path(__file__).resolve().parents[1]
+    source=(root/"fancontrol/cpu_msr_win.h").read_text()
+    assert "GetActiveProcessorGroupCount()!=1" in source
+    assert "frame.time_ms=start;" in source
+    assert "GetTickCount64()-start>250" in source
