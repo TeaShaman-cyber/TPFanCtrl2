@@ -113,6 +113,14 @@ The icon helper projects under `TPFCIcon` and `TPFCIcon_noballons` still
 name the v143 toolset; add `/p:PlatformToolset=v145` when building them
 with current tools.
 
+## Known hardware limitation
+
+On the tested ThinkPad L14 Gen 1, the EC can retain an elevated PWM
+lower bound even after a successful fan-level command. A reboot
+restored the normal bound in a measured case. See the
+[documented R17 limitation and evidence](docs/r17-ec-retained-pwm-floor.md).
+This is not a general ThinkPad defect claim or a firmware fix.
+
 ## Tested hardware
 
 ThinkPad X13 Gen 3 (21BN, single fan) runs the service + tray setup as
