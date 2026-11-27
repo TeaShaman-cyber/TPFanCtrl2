@@ -107,9 +107,8 @@ int main() {
     a=stop.evaluate(sample(30000,45,1));
     assert(a.kind==Kind::Level && a.level==0);
     assert(stop.evaluate(sample(31000,45,0)).kind==Kind::Hold);
-    for(unsigned t=32000;t<35000;t+=1000)
-        assert(stop.evaluate(sample(t,70,0)).kind==Kind::Hold);
-    a=stop.evaluate(sample(35000,70,0));
+    // At the recovery threshold, restart immediately, not after a dwell.
+    a=stop.evaluate(sample(32000,70,0));
     assert(a.kind==Kind::Level && a.level==1);
     Policy urgent(passive);
     assert(urgent.evaluate(sample(0,85,0)).kind==Kind::Firmware);
@@ -125,4 +124,9 @@ int main() {
         assert(resumed.evaluate(sample(t,45,128)).kind==Kind::Hold);
     a=resumed.evaluate(sample(5000,45,128));
     assert(a.kind==Kind::Level && a.level==1);
+    Config permissive=passive;
+    permissive.curve={{75,0},{80,5000}};
+    Policy keep_running(permissive);
+    for(unsigned t=0;t<=40000;t+=1000)
+        assert(keep_running.evaluate(sample(t,72,1)).kind==Kind::Hold);
 }

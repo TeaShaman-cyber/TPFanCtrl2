@@ -140,6 +140,10 @@ public:
 			return handback(s);
 		if (s.level < config_.calibration.front().level || s.level > config_.calibration.back().level)
 			return handback(s);
+		// A stopped fan takes time to spin up. Restart at the recovery
+		// threshold without waiting for the ordinary rise dwell.
+		if (s.level == 0 && s.temperature >= config_.recover)
+			return request(1, s.time_ms);
 		const int index = s.level-config_.calibration.front().level;
 		if (s.level != last_level_) {
 			direction_ = 0;
@@ -154,6 +158,9 @@ public:
 			direction = 1;
 		else if (i && target < steps[i-1].rpm + (steps[i].rpm-steps[i-1].rpm)/2 - config_.hysteresis)
 			direction = -1;
+		if (direction < 0 && s.level == 1 && steps.front().level == 0 &&
+		    s.temperature >= config_.recover)
+			direction = 0;
 		if (!direction || direction != direction_) {
 			direction_ = direction;
 			since_ = s.time_ms;

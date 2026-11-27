@@ -224,8 +224,10 @@ unvalidated calibration on a live system.
 
 A zero-RPM calibration point `0 0` is optional. When present, the
 policy can stop the fan after at least 30 seconds of sustained downward
-demand (or the configured longer fall dwell). The normal rise dwell
-still applies to restarting, and thermal fail-safe has priority.
+demand (or the configured longer fall dwell). Below the recovery temperature the normal rise dwell applies. At the
+recovery temperature a stopped fan restarts immediately, and a running
+fan is not stopped at or above that threshold. Thermal fail-safe retains
+priority.
 Recovery from firmware starts with a running step even if the curve
 requests zero. These timings are provisional, not a validated
 machine-specific temperature curve.
