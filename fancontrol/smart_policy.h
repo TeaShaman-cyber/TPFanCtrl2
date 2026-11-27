@@ -43,14 +43,15 @@ inline bool valid_config(const Config& c) {
 		return false;
 	for (std::size_t i = 0; i < c.curve.size(); ++i) {
 		const auto& p = c.curve[i];
-		if (!std::isfinite(p.temperature) || !std::isfinite(p.rpm) || p.rpm <= 0 ||
+		if (!std::isfinite(p.temperature) || !std::isfinite(p.rpm) || p.rpm < 0 ||
 		    p.temperature <= 0 || p.temperature > 110 ||
 		    (i && (p.temperature <= c.curve[i-1].temperature || p.rpm < c.curve[i-1].rpm)))
 			return false;
 	}
 	for (std::size_t i = 0; i < c.calibration.size(); ++i) {
 		const auto& p = c.calibration[i];
-		if (p.level < 1 || p.level > 7 || !std::isfinite(p.rpm) || p.rpm <= 0 ||
+		if (p.level < 0 || p.level > 7 || !std::isfinite(p.rpm) ||
+		    (p.level == 0 ? p.rpm != 0 : p.rpm <= 0) ||
 		    (i && (p.level != c.calibration[i-1].level + 1 ||
 		           p.rpm - c.calibration[i-1].rpm <= 2 * c.hysteresis)))
 			return false;
@@ -130,6 +131,8 @@ public:
 					level = step.level;
 					break;
 				}
+			// Recover to a running step first; stopping needs its own dwell.
+			if (level == 0) level = 1;
 			recovering_ = false;
 			return request(level, s.time_ms);
 		}
@@ -156,7 +159,10 @@ public:
 			since_ = s.time_ms;
 			return hold();
 		}
-		if (s.time_ms-since_ < (direction > 0 ? config_.rise_ms : config_.fall_ms))
+		// Stopping is more expensive than ordinary downward steps.
+		const auto dwell = direction < 0 && s.level == 1 && steps.front().level == 0 && config_.fall_ms < 30000
+		    ? 30000ULL : (direction > 0 ? config_.rise_ms : config_.fall_ms);
+		if (s.time_ms-since_ < dwell)
 			return hold();
 		return request(s.level+direction, s.time_ms);
 	}

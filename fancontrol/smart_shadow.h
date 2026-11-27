@@ -35,7 +35,7 @@ inline bool parse_shadow_config(const std::string& line, Config& result) {
 		if (input.eof())
 			break;
 		Step step{};
-		if (c.calibration.size() >= 7 || !(input >> step.level >> step.rpm))
+		if (c.calibration.size() >= 8 || !(input >> step.level >> step.rpm))
 			return false;
 		c.calibration.push_back(step);
 	}

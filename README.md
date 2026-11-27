@@ -221,3 +221,11 @@ an actuator input. Invalid/stale CPU data, command failure or the urgent
 temperature still use the existing firmware fail-safe. Firmware is not
 the ordinary target of a healthy temperature curve. Do not activate an
 unvalidated calibration on a live system.
+
+A zero-RPM calibration point `0 0` is optional. When present, the
+policy can stop the fan after at least 30 seconds of sustained downward
+demand (or the configured longer fall dwell). The normal rise dwell
+still applies to restarting, and thermal fail-safe has priority.
+Recovery from firmware starts with a running step even if the curve
+requests zero. These timings are provisional, not a validated
+machine-specific temperature curve.

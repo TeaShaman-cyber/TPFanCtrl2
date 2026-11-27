@@ -95,4 +95,34 @@ int main() {
     assert(manual.evaluate(sample(4000,79)).kind==Kind::Hold);
     assert(manual.evaluate(sample(5000,79)).kind==Kind::Hold);
     assert(manual.evaluate(sample(6000,79)).kind==Kind::Level);
+    // Level zero is a stopped fan, not an extrapolated running RPM.
+    Config passive = config();
+    passive.calibration.insert(passive.calibration.begin(), Step{0,0});
+    passive.curve = {{55,0},{65,2000},{80,5000}};
+    assert(valid_config(passive));
+    assert(target_rpm(passive,45)==0);
+    Policy stop(passive);
+    for(unsigned t=0;t<30000;t+=1000)
+        assert(stop.evaluate(sample(t,45,1)).kind==Kind::Hold);
+    a=stop.evaluate(sample(30000,45,1));
+    assert(a.kind==Kind::Level && a.level==0);
+    assert(stop.evaluate(sample(31000,45,0)).kind==Kind::Hold);
+    for(unsigned t=32000;t<35000;t+=1000)
+        assert(stop.evaluate(sample(t,70,0)).kind==Kind::Hold);
+    a=stop.evaluate(sample(35000,70,0));
+    assert(a.kind==Kind::Level && a.level==1);
+    Policy urgent(passive);
+    assert(urgent.evaluate(sample(0,85,0)).kind==Kind::Firmware);
+    Config bad_zero=passive;bad_zero.calibration[0].rpm=10;
+    assert(!valid_config(bad_zero));
+    bad_zero=passive;bad_zero.calibration[1].rpm=0;
+    assert(!valid_config(bad_zero));
+    bad_zero=passive;bad_zero.curve[0].rpm=-1;
+    assert(!valid_config(bad_zero));
+    Policy resumed(passive);
+    assert(resumed.evaluate(sample(0,45,128)).kind==Kind::Hold);
+    for(unsigned t=1000;t<5000;t+=1000)
+        assert(resumed.evaluate(sample(t,45,128)).kind==Kind::Hold);
+    a=resumed.evaluate(sample(5000,45,128));
+    assert(a.kind==Kind::Level && a.level==1);
 }

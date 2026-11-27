@@ -34,4 +34,7 @@ int main() {
     assert(s.observe(8000,40,4,true).projected==4);
     s.reset();
     assert(s.observe(9000,40,7,true).projected==128);
+    Shadow zero;
+    assert(zero.configure("100 3000 10000 2000 85 70 5000 ; 55 0 65 2000 80 5000 ; 0 0 1 2000 2 3000 3 4000 4 5000"));
+    assert(zero.observe(1000,45,0,true).projected==0);
 }
