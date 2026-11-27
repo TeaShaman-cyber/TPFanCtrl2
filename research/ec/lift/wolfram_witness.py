@@ -54,7 +54,7 @@ def render(m):
     return f'''Module[{{s={arr(m["states"])},g,h,c,out}},
 g=Graph[s,{edges(m["edges"])}];
 h=Graph[s,{edges(m["reset_edges"])}];
-c[x_]:=Sort[DeleteDuplicates[Table[Sort[Intersection[VertexOutComponent[x,i],VertexInComponent[x,i]]],{{i,s}}]]];
+c[x_]:=SortBy[DeleteDuplicates[Table[Sort[Intersection[VertexOutComponent[x,i],VertexInComponent[x,i]]],{{i,s}}]],First];
 out=<|"vertices"->VertexCount[g],"edges"->EdgeCount[g],"reachable"->Sort[VertexOutComponent[g,{m["initial"]}]],"saturatedReachable"->Sort[VertexOutComponent[g,{m["saturated"]}]],"components"->c[g],"resetComponents"->c[h]|>;
 ExportString[out,"RawJSON","Compact"->True]]
 '''

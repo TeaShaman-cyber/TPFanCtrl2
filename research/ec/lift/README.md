@@ -180,3 +180,38 @@ Graph sample is the conditional 22-state abstraction of iteration166;
 the reset edge represents full initialization and subsequent return, not a
 proven enabled action from every firmware state. A match certifies agreement
 on graph calculations only, not correspondence to the entire EC.
+
+## Original dispatcher extraction (iteration 168)
+
+Pinned original payload, Ghidra 12.2 CR16C. ExtractDispatcher.java decodes
+raw 190da..191e2 (exclusive), reads the tables at runtime 55248..553dc
+(exclusive) via raw offset = runtime address - 20100. The stage index is
+0..16 inclusive; word-address code pointers convert as 2*word - 20100.
+dispatch_graph.py extracts the second-level table bases from P-code COPY,
+checks terminal null entries and indirect pointer scaling, and identifies
+stage 10's direct call. Stage 15's special multiple-call path and
+flag-controlled bypass are not modeled. This is a layout-specific extractor,
+not full symbolic evaluation of arbitrary machine code.
+
+84 table slots (15 null terminators) plus the direct stage-10 handler.
+R17DispatchTrace.java replays the original saturated-return harness,
+logs selected handler at the call site and before/after state on each
+completed dispatcher call. 429 calls / 35 distinct stage/substep pairs;
+all selections match the extracted table/direct-call contract. Timers and
+hardware remain modeled by the existing guarded emulator.
+
+    python3 -m unittest -v test_dispatch_graph test_wolfram_witness test_audit test_lift
+    python3 dispatch_graph.py dispatcher.pcode dispatch.trace --out /tmp/dispatch-graph.json
+    cmp dispatch-graph.json /tmp/dispatch-graph.json
+
+The graph contains only observed completed call edges, projected onto
+(stage, substep, floor==500), encoded as stage*512+substep*2+saturated.
+44 vertices, 46 edges, 28 strongly connected components (two 9-node
+cycles and 26 singletons). The saturated normal cycle reaches only its
+nine vertices within this observed graph. This is not an exhaustive
+reachability or no-escape proof: unobserved edges may be missing, and
+projection may join incompatible concrete states. No reset edges are
+invented; reset_edges duplicates edges for the existing witness schema.
+Wolfram comparison uses canonical SCC ordering by minimum vertex, not
+Wolfram's default list ordering. Actual MCPorter run MATCH; failed
+ordering-only comparison retained locally as regression evidence.

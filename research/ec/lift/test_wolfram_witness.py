@@ -40,6 +40,11 @@ class WitnessTests(unittest.TestCase):
         self.assertEqual(classify(0,"Failure[timeout]",e),"DEGRADED")
         self.assertEqual(classify(0,"Warning: error\n"+raw,e),"DEGRADED")
         self.assertEqual(classify(0,raw+"\n"+raw,e),"DEGRADED")
+    def test_component_order_contract(self):
+        # Wolfram Sort on unequal-length lists is not lexicographic.
+        # First vertex uniquely orders disjoint, internally sorted SCCs.
+        self.assertIn("SortBy[DeleteDuplicates[Table[Sort[Intersection",render(validate(self.model)))
+        self.assertIn("{i,s}]],First]",render(validate(self.model)))
     def test_wrong_type(self):
         e=expected(validate(self.model)); e["vertices"]=22.0
         self.assertEqual(classify(0,"Out[1]= "+json.dumps(json.dumps(e)),expected(validate(self.model))),"MISMATCH")
