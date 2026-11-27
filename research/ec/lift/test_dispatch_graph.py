@@ -33,6 +33,16 @@ class DispatchTests(unittest.TestCase):
         with self.assertRaises(ValueError): table(s)
     def test_incomplete(self):
         with self.assertRaises(ValueError): table(self.ir.replace("EXTRACT_PASS",""))
+    def test_repeat_fault_graph(self):
+        from wolfram_witness import expected
+        rows=observed(self.trace,table(self.ir))
+        second=observed(Path("repeat.trace").read_text(),table(self.ir))
+        self.assertEqual(len(second),330)
+        g=graph(rows+second)
+        self.assertEqual((len(g["states"]),len(g["edges"])),(45,48))
+        self.assertEqual(len(expected(g)["saturatedReachable"]),35)
+        self.assertTrue(any(a[:3]==(11,8,500) and b[:3]==(12,0,500) for a,b in second))
+        self.assertFalse(any(a[2]==500 and b[2]!=500 for a,b in rows+second))
     def test_observed_graph(self):
         g=graph(observed(self.trace,table(self.ir)))
         self.assertIn(g["initial"],g["states"])

@@ -215,3 +215,30 @@ invented; reset_edges duplicates edges for the existing witness schema.
 Wolfram comparison uses canonical SCC ordering by minimum vertex, not
 Wolfram's default list ordering. Actual MCPorter run MATCH; failed
 ordering-only comparison retained locally as regression evidence.
+
+## Local-to-global reachability bridge (iteration 170)
+
+Inspired by CDCLean.FiniteGraph.reachable_of_adj_reachable (NashWilliams.lean
+757–765, source 577e9d9ea326d520f80672ee69b830bf1d513df5), generalize to
+directed relations and a projection function. Reachability.lean proves a
+generic invariant-preserving simulation of arbitrary finite walks by local
+steps, which may map to zero or more abstract steps. Instantiate on the
+three lifted slice functions with fixed upper=500, bounded initial floor
+and output, and explicit abstract resume. Shows monotone floor for all
+finite walks in that model and closure of saturated floor. Reset is an
+explicit counterexample outside the relation. This is a theorem about
+composition of lifted slices, not a claim that every original dispatcher
+or interrupt step is covered. Native bv_decide dependence remains in
+the instantiated arithmetic lemmas; generic path induction is separate.
+No new dependency on Mathlib.
+
+R17RepeatFaultTrace.java executes a second nine-miss episode after the
+original recovery, returning to stage11/sub0 with floor/output500.
+330 additional completed dispatch calls; same table checks.
+Union with baseline trace: 759 calls, 45 projected vertices, 48 edges,
+SCC sizes 35,9,1, 35 vertices reachable from saturated normal state
+(previously 9); no observed saturated-to-unsaturated edge.
+The 35-state saturated SCC now includes recovery and restart. The
+Wolfram/Python comparison uses the same graph JSON; still an observed
+projection, not a complete upper approximation. CI regenerates both graphs
+and verifies the bridge and a false reset canary. No firmware modification.

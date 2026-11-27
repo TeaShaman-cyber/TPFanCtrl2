@@ -146,11 +146,20 @@ jobs:
             for f in LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean; do
               sed '1d; /^example : lifted /d' "$f"
             done
-            cat Compose.lean
+            cat Compose.lean Reachability.lean
           } > "$RUNNER_TEMP/Composition.lean"
-          sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean Compose.lean > ../../../qa-artifacts/composition.sha256
+          sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean Compose.lean Reachability.lean > ../../../qa-artifacts/composition.sha256
           timeout 300 lean "$RUNNER_TEMP/Composition.lean" | tee ../../../qa-artifacts/composition.log
           echo COMPOSITION_PROOF_ACCEPTED | tee ../../../qa-artifacts/composition-result.txt
+          cp "$RUNNER_TEMP/Composition.lean" "$RUNNER_TEMP/ReachFalse.lean"
+          printf '\n theorem false_reset_canary : (R17Bridge.reset R17Bridge.raised).floor = 500 := by decide\n' >> "$RUNNER_TEMP/ReachFalse.lean"
+          set +e
+          timeout 300 lean "$RUNNER_TEMP/ReachFalse.lean" > ../../../qa-artifacts/reach-canary.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" = 1
+          grep -E 'error:.*(decide|false)' ../../../qa-artifacts/reach-canary.log
+          echo REACHABILITY_BRIDGE_ACCEPTED | tee ../../../qa-artifacts/reach-result.txt
       - name: Verify capture arithmetic projection
         if: matrix.slice == 'capture'
         shell: bash
@@ -180,6 +189,10 @@ jobs:
           python3 -m unittest -v test_audit test_lift test_wolfram_witness test_dispatch_graph
           python3 dispatch_graph.py dispatcher.pcode dispatch.trace --out "$RUNNER_TEMP/dispatch-graph.json"
           cmp dispatch-graph.json "$RUNNER_TEMP/dispatch-graph.json"
+          cat dispatch.trace repeat.trace > "$RUNNER_TEMP/repeat.trace"
+          python3 dispatch_graph.py dispatcher.pcode "$RUNNER_TEMP/repeat.trace" --out "$RUNNER_TEMP/repeat-graph.json"
+          cmp repeat-graph.json "$RUNNER_TEMP/repeat-graph.json"
+          sha256sum dispatcher.pcode dispatch.trace repeat.trace repeat-graph.json R17RepeatFaultTrace.java > ../../../qa-artifacts/repeat.sha256
           python3 audit.py fan-audit.pcode > "$RUNNER_TEMP/audit.tsv"
           cmp audit.tsv "$RUNNER_TEMP/audit.tsv"
           sha256sum audit.py test_audit.py fan-audit.pcode audit.tsv CorrectionDomain.lean correction.tsv ExtractFanAudit.java R17CorrectionAudit.java > ../../../qa-artifacts/audit.sha256
