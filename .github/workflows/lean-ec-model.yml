@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slice: [clamp, recovery, sample, decay]
+        slice: [clamp, recovery, sample, decay, capture]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,6 +81,7 @@ jobs:
           grep -E 'error:.*(decide|false)' qa-artifacts/canary.log
           echo 'PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee qa-artifacts/result.txt
       - name: Verify deterministic P-code lift and false canary
+        if: matrix.slice != 'capture'
         env:
           SLICE: ${{ matrix.slice }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -150,6 +151,26 @@ jobs:
           sha256sum LiftedClamp.lean LiftedRecovery.lean LiftedSample.lean LiftedDecay.lean Compose.lean > ../../../qa-artifacts/composition.sha256
           timeout 300 lean "$RUNNER_TEMP/Composition.lean" | tee ../../../qa-artifacts/composition.log
           echo COMPOSITION_PROOF_ACCEPTED | tee ../../../qa-artifacts/composition-result.txt
+      - name: Verify capture arithmetic projection
+        if: matrix.slice == 'capture'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-artifacts
+          git rev-parse HEAD > qa-artifacts/source-sha.txt
+          lean --version > qa-artifacts/lean-version.txt
+          cd research/ec/lift
+          sha256sum CaptureDomain.lean capture.tsv R17CaptureDomain.java R17AliasDecay.java > ../../../qa-artifacts/capture.sha256
+          timeout 300 lean CaptureDomain.lean | tee ../../../qa-artifacts/capture-proof.log
+          cp CaptureDomain.lean "$RUNNER_TEMP/CaptureFalse.lean"
+          printf '\n theorem false_capture_canary : R17CaptureDomain.rpmWord 48 = 1250000 := by decide\n' >> "$RUNNER_TEMP/CaptureFalse.lean"
+          set +e
+          timeout 300 lean "$RUNNER_TEMP/CaptureFalse.lean" > ../../../qa-artifacts/capture-canary.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" = 1
+          grep -E 'error:.*(decide|false)' ../../../qa-artifacts/capture-canary.log
+          echo CAPTURE_ARITHMETIC_ACCEPTED | tee ../../../qa-artifacts/capture-result.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

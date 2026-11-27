@@ -104,3 +104,25 @@ is reachable at the real EC. Missing sentinel, nonzero misses, non-regulation
 stage/substep and reported underspeed prevent decay. The composed model checks
 the original clamp with the updated floor, not the stack/ABI or hardware
 write/call/return. No firmware deployment.
+
+## Capture domain (iteration 162)
+
+CaptureDomain.lean is explicitly an arithmetic projection, not an automatic
+lift of original 192fe (loop and division helpers remain to be lifted). For
+channel factor 5 and nonzero integer mean period, the original calculation
+reduces to floor(60000000/mean) mod 65536. The capture-domain original
+instruction emulator executes 20 synthetic cases through capture ISR,
+conversion and validation. 65535 capture period is discarded; zero may be
+stored (mixed zero/12000 gives 10000 RPM); all-zero conversion hits an
+unmodeled write at address 0, therefore unknown rather than accepted.
+Finite arithmetic domain 1..65534 yields no 65534 or 65535 RPM, maximum
+65502, and 96 short-period aliases in 2000..6500 RPM. Actual equal period
+48 produces 4816 RPM, accepted; a real-like 12458 period produces the
+same mathematical word. R17AliasDecay runs complete fault/restart plus
+subsequent capture and correction: synthetic period48 reduces candidate
+floor499->498, just as normal period12000; period916 gives 65502 and requests
+upward correction (no decay), period52585 yields1141 and no decay.
+Correction consumes previous validated measurement before next acquisition;
+the first replay initially measured the wrong phase, then corrected.
+No electrical reachability or hardware timing proof. No changes to overlay.
+Lean finite enumeration uses native_decide; concrete examples use decide.
