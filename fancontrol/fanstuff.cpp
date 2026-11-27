@@ -456,12 +456,13 @@ bool FANCONTROL::SmartLiveControl() {
 	const auto action = this->SmartLive.evaluate(GetTickCount64(),
 	    this->CpuMsrFrame, this->MaxTemp, static_cast<unsigned char>(this->State.FanCtrl),
 	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true, &input);
-	if (action.kind == smart_policy::Kind::Hold)
+	const bool command = action.kind != smart_policy::Kind::Hold;
+	if (!command && action.reason == smart_policy::Reason::None)
 		return true;
 	// Capture the observed sensor slot before SetFan changes the control state.
 	// This is the existing poll value, not a fresh raw EC register read.
 	const int sensor0 = static_cast<unsigned char>(this->State.Sensors[0]);
-	const bool ok = this->SetFan(action.kind == smart_policy::Kind::Firmware ?
+	const bool ok = !command || this->SetFan(action.kind == smart_policy::Kind::Firmware ?
 	    "SmartLive failsafe" : "SmartLive", action.level);
 	// Log after the command, so diagnostic I/O cannot delay its initial dispatch.
 	// Keep each record short enough for the existing 160-byte IPC trace ring.
@@ -469,7 +470,7 @@ bool FANCONTROL::SmartLiveControl() {
 	const auto tick = static_cast<unsigned long long>(input.now);
 	sprintf_s(msg, sizeof(msg),
 	    "SmartDecision tick=%llu reason=%s level=%d request=%d set_ok=%d",
-	    tick, smart_policy::reason_name(action.reason), input.level, action.level, ok?1:0);
+	    tick, smart_policy::reason_name(action.reason), input.level, action.level, command?(ok?1:0):-1);
 	this->Trace(msg);
 	sprintf_s(msg, sizeof(msg),
 	    "SmartInputs tick=%llu valid=%d cpu_valid=%d epoch=%d package=%d hottest=%d ec_max=%d sensor0=%d selected=%d",
@@ -483,6 +484,24 @@ bool FANCONTROL::SmartLiveControl() {
 	    input.acknowledged?1:0, this->FanCommandPending?1:0,
 	    static_cast<unsigned char>(this->State.FanCtrl));
 	this->Trace(msg);
+	if (action.reason == smart_policy::Reason::PollGapReanchor ||
+	    action.reason == smart_policy::Reason::PollDiscontinuity) {
+		const auto& p = this->SmartPoll;
+		const auto previous = input.now-input.gap;
+		if (input.gap && p.ordered(previous,input.now)) {
+			sprintf_s(msg,sizeof(msg),
+			    "SmartPoll tick=%llu idle=%llu start=%llu ec=%llu msr=%llu queue=%llu handler=%llu",
+			    tick, static_cast<unsigned long long>(p.dispatch-previous),
+			    static_cast<unsigned long long>(p.worker-p.dispatch),
+			    static_cast<unsigned long long>(p.ec_done-p.worker),
+			    static_cast<unsigned long long>(p.done-p.ec_done),
+			    static_cast<unsigned long long>(p.handler-p.done),
+			    static_cast<unsigned long long>(input.now-p.handler));
+		} else {
+			sprintf_s(msg,sizeof(msg),"SmartPoll tick=%llu unavailable",tick);
+		}
+		this->Trace(msg);
+	}
 	return ok;
 }
 

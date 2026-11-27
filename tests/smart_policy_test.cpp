@@ -55,7 +55,61 @@ int main() {
     assert(fail.evaluate(sample(3000,60,1)).kind==Kind::Firmware);
     Policy gap(cfg);
     gap.evaluate(sample(0,60));
-    assert(gap.evaluate(sample(2001,60)).kind==Kind::Firmware);
+    // Isolated bounded late poll with confirmed running fan: reanchor, no command.
+    a=gap.evaluate(sample(2640,69));
+    assert(a.kind==Kind::Hold && a.reason==Reason::PollGapReanchor);
+    assert(gap.evaluate(sample(3640,69)).kind==Kind::Hold);
+    assert(gap.evaluate(sample(6468,77)).kind==Kind::Firmware); // repeated gap before healthy window
+    Policy drift(cfg);
+    drift.evaluate(sample(0,60));
+    assert(drift.evaluate(sample(2640,60,2)).kind==Kind::Firmware);
+    Policy boundary(cfg);
+    boundary.evaluate(sample(0,40));
+    assert(boundary.evaluate(sample(4000,40)).reason==Reason::PollGapReanchor);
+    Policy huge_gap(cfg);
+    huge_gap.evaluate(sample(0,60));
+    assert(huge_gap.evaluate(sample(4001,60)).kind==Kind::Firmware);
+    Policy later(cfg);
+    later.evaluate(sample(0,60));
+    assert(later.evaluate(sample(2828,77)).kind==Kind::Hold);
+    for(unsigned t=3828;t<=7828;t+=1000)
+        assert(later.evaluate(sample(t,40)).kind==Kind::Hold);
+    assert(later.evaluate(sample(10468,69)).kind==Kind::Hold);
+    Policy no_credit(cfg);
+    no_credit.evaluate(sample(0,79));
+    no_credit.evaluate(sample(1000,79));
+    assert(no_credit.evaluate(sample(3640,79)).kind==Kind::Hold);
+    assert(no_credit.evaluate(sample(4640,79)).kind==Kind::Hold);
+    assert(no_credit.evaluate(sample(5640,79)).kind==Kind::Hold);
+    assert(no_credit.evaluate(sample(6640,79)).kind==Kind::Hold);
+    assert(no_credit.evaluate(sample(7640,79)).kind==Kind::Level);
+    Policy down_gap(cfg);
+    for(unsigned t=0;t<=8000;t+=1000)
+        assert(down_gap.evaluate(sample(t,40,4)).kind==Kind::Hold);
+    assert(down_gap.evaluate(sample(10640,40,4)).reason==Reason::PollGapReanchor);
+    for(unsigned t=11640;t<21640;t+=1000)
+        assert(down_gap.evaluate(sample(t,40,4)).kind==Kind::Hold);
+    assert(down_gap.evaluate(sample(21640,40,4)).kind==Kind::Level);
+    Policy gap_hot(cfg);
+    gap_hot.evaluate(sample(0,60));
+    assert(gap_hot.evaluate(sample(2640,85)).reason==Reason::UrgentTemperature);
+    Policy gap_invalid(cfg);
+    gap_invalid.evaluate(sample(0,60));
+    assert(gap_invalid.evaluate(sample(2640,60,1,true,false)).reason==Reason::InvalidInput);
+    Policy gap_unconfirmed(cfg);
+    gap_unconfirmed.evaluate(sample(0,60));
+    assert(gap_unconfirmed.evaluate(sample(2640,60,1,false)).kind==Kind::Firmware);
+    Policy gap_pending(cfg);
+    for(unsigned t=0;t<3000;t+=1000)gap_pending.evaluate(sample(t,79));
+    assert(gap_pending.evaluate(sample(3000,79)).kind==Kind::Level);
+    assert(gap_pending.evaluate(sample(5640,79,1,false)).kind==Kind::Firmware);
+    Policy gap_bios(cfg);
+    gap_bios.evaluate(sample(0,60,128));
+    gap_bios.evaluate(sample(1000,60,128));
+    assert(gap_bios.evaluate(sample(3640,60,128)).kind==Kind::Hold);
+    for(unsigned t=4640;t<9640;t+=1000)
+        assert(gap_bios.evaluate(sample(t,60,128)).kind==Kind::Hold);
+    assert(gap_bios.evaluate(sample(9640,60,128)).kind==Kind::Level);
     Policy nan(cfg);
     assert(nan.evaluate(sample(0,std::numeric_limits<double>::quiet_NaN())).kind==Kind::Firmware);
     Config bad=cfg; bad.calibration[1].level=3;
@@ -110,6 +164,9 @@ int main() {
     // At the recovery threshold, restart immediately, not after a dwell.
     a=stop.evaluate(sample(32000,70,0));
     assert(a.kind==Kind::Level && a.level==1);
+    Policy gap_zero(passive);
+    gap_zero.evaluate(sample(0,45,0));
+    assert(gap_zero.evaluate(sample(2640,45,0)).kind==Kind::Firmware);
     Policy urgent(passive);
     assert(urgent.evaluate(sample(0,85,0)).kind==Kind::Firmware);
     Config bad_zero=passive;bad_zero.calibration[0].rpm=10;
@@ -145,6 +202,13 @@ int main() {
     assert(hot.evaluate(sample(2500,84,2)).kind==Kind::Hold);
     assert(hot.evaluate(sample(3000,84,2)).kind==Kind::Hold);
     assert(hot.evaluate(sample(3500,85,2)).kind==Kind::Firmware);
+    Policy adaptive_gap(adaptive);
+    assert(adaptive_gap.evaluate(sample(0,84)).kind==Kind::Hold);
+    assert(adaptive_gap.evaluate(sample(1000,84)).kind==Kind::Hold);
+    assert(adaptive_gap.evaluate(sample(3640,84)).reason==Reason::PollGapReanchor);
+    assert(adaptive_gap.evaluate(sample(4640,84)).kind==Kind::Hold);
+    assert(adaptive_gap.evaluate(sample(5640,84)).kind==Kind::Hold);
+    assert(adaptive_gap.evaluate(sample(6640,84)).kind==Kind::Level);
     Policy mild(adaptive);
     for(unsigned t=0;t<6000;t+=1000)
         assert(mild.evaluate(sample(t,65)).kind==Kind::Hold);

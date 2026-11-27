@@ -31,7 +31,7 @@ struct Sample {
 };
 enum class Kind { Hold, Level, Firmware };
 enum class Reason {
-    None, InvalidConfig, InvalidInput, UrgentTemperature, PollDiscontinuity,
+    None, InvalidConfig, InvalidInput, UrgentTemperature, PollDiscontinuity, PollGapReanchor,
     PendingTimeout, PendingMismatch, FirmwareUnconfirmed, UnconfirmedLevel,
     LevelOutsideCalibration, Recovery, Restart, RiseDwell, FallDwell
 };
@@ -41,6 +41,7 @@ inline const char* reason_name(Reason reason) {
     case Reason::InvalidInput: return "invalid_input";
     case Reason::UrgentTemperature: return "urgent_temperature";
     case Reason::PollDiscontinuity: return "poll_discontinuity";
+    case Reason::PollGapReanchor: return "poll_gap_reanchor";
     case Reason::PendingTimeout: return "pending_timeout";
     case Reason::PendingMismatch: return "pending_mismatch";
     case Reason::FirmwareUnconfirmed: return "firmware_unconfirmed";
@@ -105,6 +106,7 @@ public:
 	void reset() {
 		have_time_ = false;
 		last_gap_ = 0;
+		grace_used_ = false;
 		last_level_ = -1;
 		direction_ = 0;
 		pending_ = -1;
@@ -118,8 +120,8 @@ public:
 			return hold();
 		}
 		const auto elapsed = have_time_ && s.time_ms > last_time_ ? s.time_ms-last_time_ : 0;
-		const bool discontinuity = have_time_ &&
-		    (s.time_ms <= last_time_ || s.time_ms-last_time_ > config_.max_gap_ms);
+		const bool nonmonotonic = have_time_ && s.time_ms <= last_time_;
+		const bool late = have_time_ && elapsed > config_.max_gap_ms;
 		last_time_ = s.time_ms;
 		last_gap_ = elapsed;
 		have_time_ = true;
@@ -127,7 +129,27 @@ public:
 		if (!s.valid || !std::isfinite(s.temperature) || s.temperature <= 0)
 			return handback(s, Reason::InvalidInput);
 		if (s.temperature >= config_.urgent) return handback(s, Reason::UrgentTemperature);
-		if (discontinuity) return handback(s, Reason::PollDiscontinuity);
+		if (nonmonotonic) return handback(s, Reason::PollDiscontinuity);
+		if (late) {
+			// A fresh sample after one bounded scheduling delay is not a
+			// failed thermal read. Only a confirmed running calibrated fan
+			// may hold, with no pending command and no dwell credit.
+			if (!grace_used_ && elapsed-config_.max_gap_ms <= config_.max_gap_ms &&
+			    !firmware_ && pending_ == -1 && s.acknowledged && s.level > 0 &&
+			    s.level == last_level_ &&
+			    s.level >= config_.calibration.front().level &&
+			    s.level <= config_.calibration.back().level) {
+				grace_used_ = true;
+				grace_since_ = s.time_ms;
+				direction_ = 0;
+				rise_credit_ = 0;
+				since_ = s.time_ms;
+				return {Kind::Hold, -1, Reason::PollGapReanchor};
+			}
+			return handback(s, Reason::PollDiscontinuity);
+		}
+		if (grace_used_ && s.time_ms-grace_since_ >= config_.recovery_ms)
+			grace_used_ = false;
 		if (pending_ != -1) {
 			if (!s.acknowledged) {
 				if (s.time_ms-pending_since_ >= config_.max_gap_ms)
@@ -224,6 +246,8 @@ private:
 	static Action hold() { return {Kind::Hold, -1}; }
 	Action handback(const Sample& s, Reason reason) {
 		firmware_ = true;
+		grace_used_ = true;
+		grace_since_ = s.time_ms;
 		recovering_ = false;
 		direction_ = 0;
 		pending_ = -1;
@@ -237,9 +261,9 @@ private:
 		return {Kind::Level, level, reason};
 	}
 	Config config_;
-	bool configured_, have_time_ = false, firmware_ = false, recovering_ = false;
+	bool configured_, have_time_ = false, firmware_ = false, recovering_ = false, grace_used_ = false;
 	double rise_credit_=0, last_rate_=0;
 	int last_level_ = -1, direction_ = 0, pending_ = -1;
-	unsigned long long last_gap_ = 0, last_time_ = 0, since_ = 0, pending_since_ = 0;
+	unsigned long long last_gap_ = 0, grace_since_ = 0, last_time_ = 0, since_ = 0, pending_since_ = 0;
 };
 } // namespace smart_policy

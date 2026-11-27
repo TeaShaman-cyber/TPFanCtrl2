@@ -144,9 +144,11 @@ def test_msr_worker_is_opt_in_and_invalidates_failed_reads(tmp_path):
     stop = source.index("\n}", start) + 2
     worker = source[start:stop]
     harness = r'''
-#include "cpu_msr.h"
+#include "smart_live.h"
 #include <cassert>
 int posted=0;
+uint64_t tick=1000;
+uint64_t GetTickCount64(){return tick++;}
 constexpr int WM__NEWDATA=1;
 void PostMessage(int,int,int,int){++posted;}
 struct FANCONTROL {
@@ -154,6 +156,7 @@ struct FANCONTROL {
     unsigned long long CpuWorkerEpoch=0, CpuPollEpoch=0;
     int State=0, hwndDialog=0, ec_ok=1;
     cpu_msr::Frame CpuMsrFrame;
+    smart_policy::PollTiming SmartPoll;
     struct Shadow {bool enabled() const{return true;}} SmartShadow;
     struct Live {bool enabled() const{return false;}} SmartLive;
     struct Reader {
@@ -178,6 +181,7 @@ int main(){
     f.ec_ok=1; ++f.CpuPollEpoch; f.WorkThread();
     assert(f.CpuMsr.closes==1 && f.CpuMsr.opens==2 && f.CpuMsr.samples==3 && f.CpuMsrFrame.valid);
     assert(posted==5);
+    assert(f.SmartPoll.worker < f.SmartPoll.ec_done && f.SmartPoll.ec_done < f.SmartPoll.done);
 }
 '''
     code = tmp_path / "msr-worker.cpp"
@@ -239,6 +243,7 @@ struct FANCONTROL {
     int MaxTemp=0, writes=0, requested=-1;
     uint64_t CpuPollEpoch=0, CpuEpoch=0;
     cpu_msr::Frame CpuMsrFrame;
+    smart_policy::PollTiming SmartPoll;
     struct {char FanCtrl=1; char Sensors[12]={42};} State;
     std::string message;
     void Trace(const char* s){assert(std::string(s).size()<128);message+=s;message+="\n";}
@@ -280,6 +285,19 @@ int main(){
     assert(f.message.find("cpu_valid=0")!=std::string::npos);
     assert(f.message.find("set_ok=0")!=std::string::npos);
     assert(f.message.find("age_ms=0 future=0")!=std::string::npos);
+    f.SmartLive.reset(); f.success=true; f.message.clear();
+    f.FanCommandPending=false; f.State.FanCtrl=1; f.CpuMsrFrame.valid=true;
+    f.CpuMsrFrame.package=66; f.CpuMsrFrame.hottest=69;
+    tick=10000; f.CpuMsrFrame.time_ms=tick;
+    assert(f.SmartLiveControl() && f.writes==3);
+    tick=12640; f.CpuMsrFrame.time_ms=tick-15;
+    f.SmartPoll={11000,11010,12625,12630,12635};
+    assert(f.SmartLiveControl() && f.writes==3);
+    assert(f.message.find("reason=poll_gap_reanchor")!=std::string::npos);
+    assert(f.message.find("set_ok=-1")!=std::string::npos);
+    assert(f.message.find("gap_ms=2640")!=std::string::npos);
+    assert(f.message.find("idle=1000 start=10 ec=1615 msr=5 queue=5 handler=5")!=std::string::npos);
+
 }
 '''
     code = tmp_path / "live-actuator.cpp"

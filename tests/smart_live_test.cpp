@@ -42,12 +42,24 @@ int main(){
     f.package=60; f.hottest=60; f.time_ms=1000;
     assert(timed.evaluate(1000,f,0,1,true,true,true).kind==Kind::Hold);
     f.time_ms=3100; DecisionInput input{};
-    assert(timed.evaluate(3100,f,0,1,true,true,true,&input).reason==Reason::PollDiscontinuity);
+    assert(timed.evaluate(3100,f,0,1,true,true,true,&input).reason==Reason::PollGapReanchor);
     assert(input.gap==2100 && input.selected==60 && input.valid);
     timed.reset(); f.time_ms=4000;
     assert(timed.evaluate(4000,f,0,1,true,true,true).kind==Kind::Hold);
     assert(timed.evaluate(4000,f,0,1,true,true,true,&input).reason==Reason::PollDiscontinuity);
     assert(input.gap==0);
+    for (int scenario=0; scenario<2; ++scenario) {
+        Live laptop;
+        assert(laptop.configure("100 6000 12000 2000 85 70 5000 2000 ; 60 2550 70 2550 80 3650 84 4150 ; 1 2550 2 3050 3 3300 4 3650 5 4150"));
+        f.package=66; f.hottest=66; f.time_ms=1000;
+        assert(laptop.evaluate(1000,f,69,1,true,true,true).kind==Kind::Hold);
+        uint64_t now=scenario?3828:3640;
+        f.package=scenario?76:66; f.hottest=scenario?77:66;
+        f.time_ms=now-(scenario?63:15);
+        auto action=laptop.evaluate(now,f,scenario?64:69,1,true,true,true,&input);
+        assert(action.kind==Kind::Hold && action.reason==Reason::PollGapReanchor);
+        assert(input.gap==(scenario?2828:2640) && input.selected==(scenario?77:69));
+    }
     Live pending; assert(pending.configure(cfg));
     f.package=75; f.hottest=75;
     for(uint64_t t=1000;t<=4000;t+=1000){f.time_ms=t; a=pending.evaluate(t,f,0,1,true,true,true);}

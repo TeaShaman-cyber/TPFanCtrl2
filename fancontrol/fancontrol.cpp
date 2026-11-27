@@ -759,6 +759,8 @@ ULONG FANCONTROL::DlgProc(HWND hwnd, ULONG msg, WPARAM mp1, LPARAM mp2) {
 			this->SendCommand(-1);
 		else if (!this->hThread && !this->FinalSeen) {
 			this->CpuPollEpoch = this->CpuEpoch;
+			this->SmartPoll = smart_policy::PollTiming{};
+			this->SmartPoll.dispatch = GetTickCount64();
 			this->hThread = this->CreateThread(FANCONTROL_Thread, this);
 		}
 		break;
@@ -1342,6 +1344,9 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 			::SendMessage(this->hwndDialog, WM_ENDSESSION, 0, 0);
 		}
 		this->hThread = 0;
+		this->SmartPoll.handler = GetTickCount64();
+	} else {
+		this->SmartPoll.dispatch = 0;
 	}
 
 	this->DrainTrace();
@@ -1793,7 +1798,9 @@ FANCONTROL::UpdateTempDisplay(void)
 //  reading the EC status may take a while, hence do it in a thread
 //-------------------------------------------------------------------------
 int FANCONTROL::WorkThread() {
+	this->SmartPoll.worker = GetTickCount64();
 	int ok = this->ReadEcStatus(&this->State);
+	this->SmartPoll.ec_done = GetTickCount64();
 	// Separate signed MSR module; no EC mutex is held here.
 	// The observer is opt-in and never changes fan ownership.
 	this->CpuMsrFrame = cpu_msr::Frame{};
@@ -1814,6 +1821,7 @@ int FANCONTROL::WorkThread() {
 		}
 	}
 
+	this->SmartPoll.done = GetTickCount64();
 	::PostMessage(this->hwndDialog, WM__NEWDATA, ok, 0);
 
 	return 0;

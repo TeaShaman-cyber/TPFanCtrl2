@@ -260,6 +260,7 @@ protected:
 	bool SmartMsrShadow = false;
 	cpu_msr::Reader CpuMsr;
 	cpu_msr::Frame CpuMsrFrame;
+	smart_policy::PollTiming SmartPoll{};
 	unsigned long long CpuEpoch = 0, CpuPollEpoch = 0, CpuWorkerEpoch = 0;
 	bool CpuMsrAttempted = false;
 	bool NvmeMonitorEnabled = false;

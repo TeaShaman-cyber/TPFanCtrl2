@@ -8,6 +8,15 @@ struct DecisionInput {
     int ec, package, hottest, selected, level;
     bool cpu_valid, epoch, valid, acknowledged;
 };
+// Worker writes its timestamps before posting WM__NEWDATA; dialog joins
+// the worker before reading them. Zero dispatch means no verified poll.
+struct PollTiming {
+    uint64_t dispatch, worker, ec_done, done, handler;
+    bool ordered(uint64_t previous, uint64_t now) const {
+        return dispatch && previous <= dispatch && dispatch <= worker &&
+            worker <= ec_done && ec_done <= done && done <= handler && handler <= now;
+    }
+};
 // Actual readback, not a simulated acknowledgement. Caller retains EC ownership.
 class Live {
 public:
