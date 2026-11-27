@@ -226,6 +226,9 @@ def test_actual_live_actuator_uses_confirmed_state(tmp_path):
     harness = r'''
 #include "smart_live.h"
 #include <cassert>
+#include <cstdio>
+#include <string>
+#define sprintf_s std::snprintf
 bool g_clientMode=false;
 uint64_t tick=0;
 uint64_t GetTickCount64(){return tick;}
@@ -236,9 +239,12 @@ struct FANCONTROL {
     int MaxTemp=0, writes=0, requested=-1;
     uint64_t CpuPollEpoch=0, CpuEpoch=0;
     cpu_msr::Frame CpuMsrFrame;
-    struct {char FanCtrl=1;} State;
+    struct {char FanCtrl=1; char Sensors[12]={42};} State;
+    std::string message;
+    void Trace(const char* s){assert(std::string(s).size()<128);message+=s;message+="\n";}
+    bool success=true;
     bool SmartLiveControl();
-    bool SetFan(const char*,int level){++writes;requested=level;FanCommandPending=true;return true;}
+    bool SetFan(const char*,int level){++writes;requested=level;FanCommandPending=true; return success;}
 };
 '''
     main = r'''
@@ -251,6 +257,9 @@ int main(){
         assert(f.SmartLiveControl());
     }
     assert(f.writes==1&&f.requested==2&&f.State.FanCtrl==1);
+    assert(f.message.find("reason=rise_dwell")!=std::string::npos);
+    assert(f.message.find("level=1 request=2")!=std::string::npos);
+    assert(f.message.find("selected=75")!=std::string::npos);
     f.CpuMsrFrame.time_ms=tick;
     assert(f.SmartLiveControl()&&f.writes==1);
     f.FanCommandPending=false;f.State.FanCtrl=2;
@@ -261,6 +270,16 @@ int main(){
     g_clientMode=false;
     f.CpuMsrFrame.package=86;f.CpuMsrFrame.hottest=86;
     assert(f.SmartLiveControl()&&f.requested==128&&f.writes==2);
+    assert(f.message.find("reason=urgent_temperature")!=std::string::npos);
+    assert(f.message.find("sensor0=42")!=std::string::npos);
+    assert(f.message.find("selected=86")!=std::string::npos);
+    f.SmartLive.reset(); f.success=false; f.message.clear();
+    f.CpuMsrFrame.valid=false;
+    assert(!f.SmartLiveControl() && f.writes==3);
+    assert(f.message.find("reason=invalid_input")!=std::string::npos);
+    assert(f.message.find("cpu_valid=0")!=std::string::npos);
+    assert(f.message.find("set_ok=0")!=std::string::npos);
+    assert(f.message.find("age_ms=0 future=0")!=std::string::npos);
 }
 '''
     code = tmp_path / "live-actuator.cpp"

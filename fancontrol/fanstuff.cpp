@@ -452,13 +452,38 @@ bool FANCONTROL::SmartLiveControl() {
 		this->SmartLive.reset();
 		return true;
 	}
+	smart_policy::DecisionInput input{};
 	const auto action = this->SmartLive.evaluate(GetTickCount64(),
 	    this->CpuMsrFrame, this->MaxTemp, static_cast<unsigned char>(this->State.FanCtrl),
-	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true);
+	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true, &input);
 	if (action.kind == smart_policy::Kind::Hold)
 		return true;
-	return this->SetFan(action.kind == smart_policy::Kind::Firmware ?
-	    "SmartLive thermal failsafe" : "SmartLive", action.level);
+	// Capture the observed sensor slot before SetFan changes the control state.
+	// This is the existing poll value, not a fresh raw EC register read.
+	const int sensor0 = static_cast<unsigned char>(this->State.Sensors[0]);
+	const bool ok = this->SetFan(action.kind == smart_policy::Kind::Firmware ?
+	    "SmartLive failsafe" : "SmartLive", action.level);
+	// Log after the command, so diagnostic I/O cannot delay its initial dispatch.
+	// Keep each record short enough for the existing 160-byte IPC trace ring.
+	char msg[160];
+	const auto tick = static_cast<unsigned long long>(input.now);
+	sprintf_s(msg, sizeof(msg),
+	    "SmartDecision tick=%llu reason=%s level=%d request=%d set_ok=%d",
+	    tick, smart_policy::reason_name(action.reason), input.level, action.level, ok?1:0);
+	this->Trace(msg);
+	sprintf_s(msg, sizeof(msg),
+	    "SmartInputs tick=%llu valid=%d cpu_valid=%d epoch=%d package=%d hottest=%d ec_max=%d sensor0=%d selected=%d",
+	    tick, input.valid?1:0, input.cpu_valid?1:0, input.epoch?1:0,
+	    input.package, input.hottest, input.ec, sensor0, input.selected);
+	this->Trace(msg);
+	sprintf_s(msg, sizeof(msg),
+	    "SmartTiming tick=%llu age_ms=%llu future=%d gap_ms=%llu ack_before=%d pending_after=%d observed_after=%d",
+	    tick, static_cast<unsigned long long>(input.now>=input.cpu_time?input.now-input.cpu_time:0),
+	    input.now<input.cpu_time?1:0, static_cast<unsigned long long>(input.gap),
+	    input.acknowledged?1:0, this->FanCommandPending?1:0,
+	    static_cast<unsigned char>(this->State.FanCtrl));
+	this->Trace(msg);
+	return ok;
 }
 
 void FANCONTROL::LogCpuMsr() {

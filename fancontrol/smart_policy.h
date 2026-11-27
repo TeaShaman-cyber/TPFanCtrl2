@@ -30,9 +30,34 @@ struct Sample {
 	bool smart; // False for manual/BIOS mode outside this policy.
 };
 enum class Kind { Hold, Level, Firmware };
+enum class Reason {
+    None, InvalidConfig, InvalidInput, UrgentTemperature, PollDiscontinuity,
+    PendingTimeout, PendingMismatch, FirmwareUnconfirmed, UnconfirmedLevel,
+    LevelOutsideCalibration, Recovery, Restart, RiseDwell, FallDwell
+};
+inline const char* reason_name(Reason reason) {
+    switch (reason) {
+    case Reason::InvalidConfig: return "invalid_config";
+    case Reason::InvalidInput: return "invalid_input";
+    case Reason::UrgentTemperature: return "urgent_temperature";
+    case Reason::PollDiscontinuity: return "poll_discontinuity";
+    case Reason::PendingTimeout: return "pending_timeout";
+    case Reason::PendingMismatch: return "pending_mismatch";
+    case Reason::FirmwareUnconfirmed: return "firmware_unconfirmed";
+    case Reason::UnconfirmedLevel: return "unconfirmed_level";
+    case Reason::LevelOutsideCalibration: return "level_outside_calibration";
+    case Reason::Recovery: return "recovery";
+    case Reason::Restart: return "restart";
+    case Reason::RiseDwell: return "rise_dwell";
+    case Reason::FallDwell: return "fall_dwell";
+    default: return "none";
+    }
+}
 struct Action {
-	Kind kind;
-	int level;
+    Kind kind;
+    int level;
+    Reason reason;
+    Action(Kind k, int l, Reason r = Reason::None) : kind(k), level(l), reason(r) {}
 };
 
 inline bool valid_config(const Config& c) {
@@ -79,12 +104,14 @@ public:
 	explicit Policy(const Config& c) : config_(c), configured_(valid_config(c)) {}
 	void reset() {
 		have_time_ = false;
+		last_gap_ = 0;
 		last_level_ = -1;
 		direction_ = 0;
 		pending_ = -1;
 		firmware_ = false;
 		recovering_ = false;
 	}
+	unsigned long long last_gap() const { return last_gap_; }
 	Action evaluate(const Sample& s) {
 		if (!s.smart) {
 			reset();
@@ -94,18 +121,21 @@ public:
 		const bool discontinuity = have_time_ &&
 		    (s.time_ms <= last_time_ || s.time_ms-last_time_ > config_.max_gap_ms);
 		last_time_ = s.time_ms;
+		last_gap_ = elapsed;
 		have_time_ = true;
-		if (!configured_ || !s.valid || !std::isfinite(s.temperature) ||
-		    s.temperature <= 0 || s.temperature >= config_.urgent || discontinuity)
-			return handback(s);
+		if (!configured_) return handback(s, Reason::InvalidConfig);
+		if (!s.valid || !std::isfinite(s.temperature) || s.temperature <= 0)
+			return handback(s, Reason::InvalidInput);
+		if (s.temperature >= config_.urgent) return handback(s, Reason::UrgentTemperature);
+		if (discontinuity) return handback(s, Reason::PollDiscontinuity);
 		if (pending_ != -1) {
 			if (!s.acknowledged) {
 				if (s.time_ms-pending_since_ >= config_.max_gap_ms)
-					return handback(s);
+					return handback(s, Reason::PendingTimeout);
 				return hold();
 			}
 			if (s.level != pending_)
-				return handback(s);
+				return handback(s, Reason::PendingMismatch);
 			pending_ = -1;
 			direction_ = 0;
 			last_level_ = s.level;
@@ -114,7 +144,7 @@ public:
 		if (firmware_ || s.level == 128) {
 			firmware_ = true;
 			if (s.level != 128 || !s.acknowledged)
-				return handback(s);
+				return handback(s, Reason::FirmwareUnconfirmed);
 			if (s.temperature > config_.recover) {
 				recovering_ = false;
 				return hold();
@@ -136,16 +166,16 @@ public:
 			// Recover to a running step first; stopping needs its own dwell.
 			if (level == 0) level = 1;
 			recovering_ = false;
-			return request(level, s.time_ms);
+			return request(level, s.time_ms, Reason::Recovery);
 		}
 		if (!s.acknowledged)
-			return handback(s);
+			return handback(s, Reason::UnconfirmedLevel);
 		if (s.level < config_.calibration.front().level || s.level > config_.calibration.back().level)
-			return handback(s);
+			return handback(s, Reason::LevelOutsideCalibration);
 		// A stopped fan takes time to spin up. Restart at the recovery
 		// threshold without waiting for the ordinary rise dwell.
 		if (s.level == 0 && s.temperature >= config_.recover)
-			return request(1, s.time_ms);
+			return request(1, s.time_ms, Reason::Restart);
 		const int index = s.level-config_.calibration.front().level;
 		if (s.level != last_level_) {
 			direction_ = 0;
@@ -181,35 +211,35 @@ public:
 			rise_credit_ += static_cast<double>(elapsed)*(rate < last_rate_ ? rate : last_rate_);
 			last_rate_=rate;
 			if (rise_credit_ < 1.0-1e-9) return hold();
-			return request(s.level+1,s.time_ms);
+			return request(s.level+1,s.time_ms, Reason::RiseDwell);
 		}
 		// Stopping is more expensive than ordinary downward steps.
 		const auto dwell = direction < 0 && s.level == 1 && steps.front().level == 0 && config_.fall_ms < 30000
 		    ? 30000ULL : (direction > 0 ? config_.rise_ms : config_.fall_ms);
 		if (s.time_ms-since_ < dwell)
 			return hold();
-		return request(s.level+direction, s.time_ms);
+		return request(s.level+direction, s.time_ms, direction > 0 ? Reason::RiseDwell : Reason::FallDwell);
 	}
 private:
 	static Action hold() { return {Kind::Hold, -1}; }
-	Action handback(const Sample& s) {
+	Action handback(const Sample& s, Reason reason) {
 		firmware_ = true;
 		recovering_ = false;
 		direction_ = 0;
 		pending_ = -1;
 		last_level_ = -1;
-		return s.level == 128 && s.acknowledged ? hold() : Action{Kind::Firmware, 128};
+		return s.level == 128 && s.acknowledged ? hold() : Action{Kind::Firmware, 128, reason};
 	}
-	Action request(int level, unsigned long long time) {
+	Action request(int level, unsigned long long time, Reason reason) {
 		pending_ = level;
 		pending_since_ = time;
 		direction_ = 0;
-		return {Kind::Level, level};
+		return {Kind::Level, level, reason};
 	}
 	Config config_;
 	bool configured_, have_time_ = false, firmware_ = false, recovering_ = false;
 	double rise_credit_=0, last_rate_=0;
 	int last_level_ = -1, direction_ = 0, pending_ = -1;
-	unsigned long long last_time_ = 0, since_ = 0, pending_since_ = 0;
+	unsigned long long last_gap_ = 0, last_time_ = 0, since_ = 0, pending_since_ = 0;
 };
 } // namespace smart_policy
