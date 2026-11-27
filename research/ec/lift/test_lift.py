@@ -15,6 +15,18 @@ class TestLift(unittest.TestCase):
         rows=Path("oracle.tsv").read_text()
         self.assertEqual(with_oracle(src,rows).count("example : lifted"),353)
         with self.assertRaises(LiftError): with_oracle(src,rows.splitlines()[0])
+    def test_recovery(self):
+        src=Path("recovery.pcode").read_text()
+        result=lift(src, "recovery")
+        self.assertIn("theorem recovery_nondecreasing",result)
+        self.assertIn("theorem wrap_counterexample",result)
+        self.assertEqual(result,lift(src,"recovery"))
+    def test_recovery_bad_store(self):
+        src=Path("recovery.pcode").read_text().replace("unique:68200:4 register:0:2","unique:68200:4 register:0:1")
+        with self.assertRaises(LiftError): lift(src,"recovery")
+    def test_recovery_wrong_store_address(self):
+        src=Path("recovery.pcode").read_text().replace("unique:68000:4 const:1e:2","unique:68000:4 const:20:2")
+        with self.assertRaises(LiftError): lift(src,"recovery")
     def test_unknown(self):
         src=Path("clamp.pcode").read_text().replace("INT_ZEXT","UNSUPPORTED",1)
         with self.assertRaises(LiftError): lift(src)

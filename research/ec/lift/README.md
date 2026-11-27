@@ -33,3 +33,23 @@ headless launcher. Oracle rows are decimal lower, upper, request, PSR, output.
 CI checks regeneration, bitvector theorems and all 353 oracle examples, plus
 a false theorem canary. GitHub runner does not retrieve original firmware;
 local exact-payload extraction remains a distinct evidence step.
+
+## Recovery floor slice (iteration 159)
+
+Raw offsets 199ea..19a08 (exclusive), 11 instructions / 79 P-code operations,
+including the actual word store to record+0x1e. The shared lifter now supports
+BOOL_AND, INT_SEXT, INT_CARRY, INT_SCARRY and a path-local, exactly-once floor
+store. Other stores reject. The input word at record+0x20 is current PWM.
+The emitted model implements 16-bit wrap before upper clamping, not unbounded
+natural-number addition. Under lower/output <= upper <= 500, the floor cannot
+decrease and stays bounded. At all three inputs 65535 it wraps to zero; this
+is an out-of-domain counterexample, not evidence of a live fault. 353 original
+instruction oracle cases are in recovery.tsv; replay scripts require the same
+pinned original payload. Regenerate with:
+  python3 lift.py recovery.pcode recovery.tsv recovery > /tmp/LiftedRecovery.lean
+  cmp LiftedRecovery.lean /tmp/LiftedRecovery.lean
+  lean LiftedRecovery.lean
+CI runs clamp and recovery in separate matrix jobs with exact-head artifacts.
+The recovery slice ends before the subsequent substep increment, not a full
+recovery routine. Universal bv_decide results rely on Lean's native reflection
+axioms; concrete by decide examples do not add that dependency.

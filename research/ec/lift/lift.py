@@ -55,14 +55,19 @@ def parse(src):
     require(done and bool(blocks) and all(ops for _,ops in blocks.values()),"incomplete input")
     return blocks,end
 
-def lift(src):
+def lift(src, kind="clamp"):
+    require(kind in ("clamp","recovery"),"unknown slice")
+    recovery=kind=="recovery"
     blocks,end=parse(src)
-    require(min(blocks)==0x19afc and end==0x19b12,"unexpected slice")
+    require((min(blocks),end)==((0x199ea,0x19a08) if recovery else (0x19afc,0x19b12)),"unexpected slice")
     # Known ABI inputs; abstract memory only for two exact record offsets.
     initial={V("register",4,4):const(4,0x11454),
              V("register",8,2):E(2,"request"),
              V("register",0x50,2):E(2,"psr")}
     mem={0x11454+0x1c:E(2,"upper"),0x11454+0x1e:E(2,"lower")}
+    if recovery:
+        del initial[V("register",8,2)]
+        mem[0x11454+0x20]=E(2,"output")
     def get(env,v):
         if v.space=="const": return const(v.size,v.offset)
         require(v in env,"uninitialized "+repr(v))
@@ -74,35 +79,62 @@ def lift(src):
                 raise LiftError("overlapping varnodes unsupported")
         env[v]=e
     visited=set()
-    def step(pc,idx,env):
+    def step(pc,idx,env,memory,writes=0):
         if pc==end:
+            if recovery:
+                require(writes==1,"recovery must store floor exactly once")
+                return memory[0x11454+0x1e].lean
+            require(writes==0,"unexpected store")
             return get(env,V("register",2,2)).lean
         require(pc in blocks,"bad target")
         nxt,ops=blocks[pc]
-        if idx==len(ops): return step(nxt,0,{k:v for k,v in env.items() if k.space!="unique"})
+        if idx==len(ops): return step(nxt,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes)
         visited.add((pc,idx))
         name,out,args=ops[idx]
         if name in ("BRANCH","CBRANCH"):
             require(out is None and len(args)==(1 if name=="BRANCH" else 2),"branch arity")
             dst=args[0]
             require(dst.space=="ram" and pc<dst.offset<=end and (dst.offset in blocks or dst.offset==end),"invalid/loop branch")
-            yes=step(dst.offset,0,{k:v for k,v in env.items() if k.space!="unique"})
+            yes=step(dst.offset,0,{k:v for k,v in env.items() if k.space!="unique"},dict(memory),writes)
             if name=="BRANCH": return yes
             cond=get(env,args[1])
             require(cond.size==1,"condition width")
-            no=step(pc,idx+1,dict(env))
+            no=step(pc,idx+1,dict(env),dict(memory),writes)
             return f"(if {truth(cond)} then {yes} else {no})"
+        if name=="STORE":
+            require(recovery and out is None and len(args)==3 and args[0]==V("const",0x1a1,8),"unsupported store")
+            addr,value=get(env,args[1]),get(env,args[2])
+            require(addr.size==4 and addr.known==0x11454+0x1e and value.size==2 and writes==0,"store outside floor contract")
+            memory=dict(memory);memory[addr.known]=value
+            return step(pc,idx+1,env,memory,writes+1)
         require(out is not None,"missing output")
         a=[get(env,v) for v in args]
         n=out.size
         if name=="COPY":
             require(len(a)==1 and a[0].size==n,"copy width");e=a[0]
         elif name=="LOAD":
-            require(len(a)==2 and args[0]==V("const",0x1a1,8) and a[1].known in mem,"unknown load")
-            e=mem[a[1].known]
+            require(len(a)==2 and args[0]==V("const",0x1a1,8) and a[1].size==4 and a[1].known in memory,"unknown load")
+            e=memory[a[1].known]
+            require(e.size==n,"load width")
         elif name=="INT_ZEXT":
             require(len(a)==1 and a[0].size<=n,"extension width")
             e=const(n,a[0].known) if a[0].known is not None else E(n,f"(BitVec.setWidth {8*n} {a[0].lean})")
+        elif name=="INT_SEXT":
+            require(len(a)==1 and a[0].size<=n,"signed extension width")
+            if a[0].known is not None:
+                val=a[0].known
+                if val >= 1<<(a[0].size*8-1): val-=1<<(a[0].size*8)
+                e=const(n,val)
+            else: e=E(n,f"(BitVec.signExtend {8*n} {a[0].lean})")
+        elif name in ("INT_CARRY","INT_SCARRY"):
+            require(len(a)==2 and a[0].size==a[1].size and n==1,"carry width")
+            x,y=a[0].lean,a[1].lean
+            if name=="INT_CARRY": b=f"(BitVec.ult ({x} + {y}) {x})"
+            else:
+                sx=f"(BitVec.slt {x} 0)";sy=f"(BitVec.slt {y} 0)"
+                ss=f"(BitVec.slt ({x} + {y}) 0)"
+                b=f"(({sx} == {sy}) && ({sx} != {ss}))"
+            e=boolean(b)
         elif name=="SUBPIECE":
             require(len(a)==2 and a[1].known is not None and a[1].known+n<=a[0].size,"subpiece bounds")
             e=E(n,f"(BitVec.setWidth {8*n} (BitVec.ushiftRight {a[0].lean} {8*a[1].known}))")
@@ -119,17 +151,55 @@ def lift(src):
             require(len(a)==2 and a[0].size==a[1].size and n==1,"compare width")
             b=f"({a[0].lean} == {a[1].lean})" if name=="INT_EQUAL" else f"(BitVec.{ 'ult' if name=='INT_LESS' else 'slt'} {a[0].lean} {a[1].lean})"
             e=boolean(b)
-        elif name=="BOOL_OR":
+        elif name in ("BOOL_OR","BOOL_AND"):
             require(len(a)==2 and a[0].size==a[1].size==n==1,"bool width")
-            e=boolean(f"({truth(a[0])} || {truth(a[1])})")
+            op="||" if name=="BOOL_OR" else "&&"
+            e=boolean(f"({truth(a[0])} {op} {truth(a[1])})")
         elif name=="BOOL_NEGATE":
             require(len(a)==1 and a[0].size==n==1,"bool width")
             e=boolean(f"(!{truth(a[0])})")
         else: raise LiftError("unsupported operation "+name)
         put(env,out,e)
-        return step(pc,idx+1,env)
-    body=step(min(blocks),0,initial)
+        return step(pc,idx+1,env,memory,writes)
+    body=step(min(blocks),0,initial,mem)
     require(visited=={(pc,i) for pc,(_,ops) in blocks.items() for i in range(len(ops))},"unvisited operations")
+    if recovery:
+        return """import Std.Tactic.BVDecide
+set_option warningAsError true
+namespace R17Recovery
+-- Generated from the floor update including its original STORE.
+def lifted (lower upper output psr : BitVec 16) : BitVec 16 :=
+  """+body+"""
+def spec (lower upper output : BitVec 16) : BitVec 16 :=
+  let inc := (if output < lower then lower else output) + 1
+  if upper ≤ inc then upper else inc
+
+theorem exact_recovery (lower upper output psr : BitVec 16) :
+    lifted lower upper output psr = spec lower upper output := by
+  unfold lifted spec
+  bv_decide
+
+theorem recovery_nondecreasing (lower upper output psr : BitVec 16)
+    (h₁ : lower ≤ upper) (h₂ : output ≤ upper) (h₃ : upper ≤ 500) :
+    lower ≤ lifted lower upper output psr ∧ lifted lower upper output psr ≤ upper := by
+  rw [exact_recovery]
+  unfold spec
+  bv_decide
+
+theorem saturation (lower psr : BitVec 16) (h : lower ≤ 500) :
+    lifted lower 500 500 psr = 500 := by
+  rw [exact_recovery]
+  unfold spec
+  bv_decide
+
+theorem wrap_counterexample : lifted 65535 65535 65535 0 = 0 := by decide
+
+#print axioms exact_recovery
+#print axioms recovery_nondecreasing
+#print axioms saturation
+#print axioms wrap_counterexample
+end R17Recovery
+"""
     return """import Std.Tactic.BVDecide
 set_option warningAsError true
 namespace R17Lift
@@ -161,8 +231,8 @@ theorem saturated (request psr : BitVec 16) :
 #print axioms saturated
 end R17Lift
 """
-def with_oracle(src, rows):
-    out=lift(src)
+def with_oracle(src, rows, kind="clamp"):
+    out=lift(src,kind)
     examples=[]
     for line in rows.splitlines():
         a=line.split()
@@ -170,8 +240,10 @@ def with_oracle(src, rows):
         lo,hi,req,psr,result=map(int,a)
         examples.append(f"example : lifted {lo} {hi} {req} {psr} = {result} := by decide")
     require(len(examples)==353,"incomplete oracle corpus")
-    return out.replace("end R17Lift","\n".join(examples)+"\nend R17Lift")
+    end="end R17Recovery" if kind=="recovery" else "end R17Lift"
+    return out.replace(end,"\n".join(examples)+"\n"+end)
 
 if __name__=="__main__":
     src=Path(sys.argv[1]).read_text()
-    sys.stdout.write(with_oracle(src,Path(sys.argv[2]).read_text()) if len(sys.argv)==3 else lift(src))
+    kind=sys.argv[3] if len(sys.argv)==4 else "clamp"
+    sys.stdout.write(with_oracle(src,Path(sys.argv[2]).read_text(),kind) if len(sys.argv)>=3 else lift(src,kind))

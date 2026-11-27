@@ -15,6 +15,10 @@ jobs:
   elaborate:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [clamp, recovery]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -51,6 +55,7 @@ jobs:
           grep -F 'version 4.33.1,' "$RUNNER_TEMP/lean-version.txt"
           grep -F 'commit 819816b2e0a3bf405af45ae5c7af2491d8f5bee6,' "$RUNNER_TEMP/lean-version.txt"
       - name: Verify model and reject false canary
+        if: matrix.slice == 'clamp'
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         shell: bash
@@ -76,19 +81,39 @@ jobs:
           grep -E 'error:.*(decide|false)' qa-artifacts/canary.log
           echo 'PROOF_ACCEPTED; FALSE_CANARY_REJECTED' | tee qa-artifacts/result.txt
       - name: Verify deterministic P-code lift and false canary
+        env:
+          SLICE: ${{ matrix.slice }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          mkdir -p qa-artifacts
+          git rev-parse HEAD > qa-artifacts/source-sha.txt
+          lean --version > qa-artifacts/lean-version.txt
           cd research/ec/lift
           python3 -m unittest -v test_lift
-          python3 lift.py clamp.pcode oracle.tsv > "$RUNNER_TEMP/LiftedClamp.lean"
-          cmp LiftedClamp.lean "$RUNNER_TEMP/LiftedClamp.lean"
-          sha256sum clamp.pcode lift.py oracle.tsv LiftedClamp.lean > ../../../qa-artifacts/lift.sha256
-          timeout 300 lean LiftedClamp.lean | tee ../../../qa-artifacts/lift-proof.log
-          cp LiftedClamp.lean "$RUNNER_TEMP/LiftFalseCanary.lean"
-          cat >> "$RUNNER_TEMP/LiftFalseCanary.lean" <<'LEAN'
-          theorem false_lift_canary : R17Lift.lifted 25 500 400 0 = 25 := by decide
-          LEAN
+          case "$SLICE" in
+            clamp)
+              file=LiftedClamp.lean
+              ir=clamp.pcode
+              rows=oracle.tsv
+              false_prop='R17Lift.lifted 25 500 400 0 = 25'
+              ;;
+            recovery)
+              file=LiftedRecovery.lean
+              ir=recovery.pcode
+              rows=recovery.tsv
+              false_prop='R17Recovery.lifted 65535 65535 65535 0 = 65535'
+              ;;
+            *) exit 2 ;;
+          esac
+          python3 lift.py "$ir" "$rows" "$SLICE" > "$RUNNER_TEMP/$file"
+          cmp "$file" "$RUNNER_TEMP/$file"
+          sha256sum "$ir" lift.py "$rows" "$file" > ../../../qa-artifacts/lift.sha256
+          timeout 300 lean "$file" | tee ../../../qa-artifacts/lift-proof.log
+          cp "$file" "$RUNNER_TEMP/LiftFalseCanary.lean"
+          printf '\n theorem false_lift_canary : %s := by decide\n' "$false_prop" >> "$RUNNER_TEMP/LiftFalseCanary.lean"
           set +e
           timeout 300 lean "$RUNNER_TEMP/LiftFalseCanary.lean" > ../../../qa-artifacts/lift-canary.log 2>&1
           rc=$?
@@ -100,7 +125,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: lean-ec-${{ github.event.pull_request.head.sha || github.sha }}
+          name: lean-ec-${{ github.event.pull_request.head.sha || github.sha }}-${{ matrix.slice }}
           path: qa-artifacts/
           if-no-files-found: error
           retention-days: 30
