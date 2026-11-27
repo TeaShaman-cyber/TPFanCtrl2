@@ -770,6 +770,7 @@ ULONG FANCONTROL::DlgProc(HWND hwnd, ULONG msg, WPARAM mp1, LPARAM mp2) {
 		this->NvmeMonitor.invalidate();
 		++this->CpuEpoch;
 		this->SmartShadow.reset();
+		this->SmartLive.reset();
 		this->isModernS0State = false;
 		this->Trace("Detected Modern S0 Exit");
 		this->ScheduleRestore();
@@ -1247,6 +1248,7 @@ ULONG FANCONTROL::OnPowerBroadcast(WPARAM mp1, LPARAM mp2) {
 		this->NvmeMonitor.invalidate();
 		++this->CpuEpoch;
 		this->SmartShadow.reset();
+		this->SmartLive.reset();
 	}
 	if (mp1 == PBT_APMSUSPEND) {
 		this->isPowerSuspendState = true;
@@ -1350,7 +1352,12 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 		this->HandleData();
 
 		if (this->restorePending) {
-			if (this->MaxTemp > 0 && this->MaxTemp <= 110)
+			int recoveryTemp=0;
+			const bool recoveryValid = this->SmartLive.enabled() && this->SingleFan
+				? this->CpuPollEpoch == this->CpuEpoch &&
+				  cpu_msr::shadow_temperature(this->CpuMsrFrame,GetTickCount64(),this->MaxTemp,recoveryTemp)
+				: this->MaxTemp > 0 && this->MaxTemp <= 110;
+			if (recoveryValid)
 				this->restoreGoodReads++;
 			else
 				this->restoreGoodReads = 0;
@@ -1374,6 +1381,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 	}
 	else {
 		this->SmartShadow.reset();
+		this->SmartLive.reset();
 		char buf[1024];
 		if (!g_clientMode)
 			SharedState_MarkTachStale();
@@ -1562,6 +1570,7 @@ bool FANCONTROL::TryClose() {
 //-------------------------------------------------------------------------
 void FANCONTROL::SwitchSmartLevel(int level) {
 	this->SmartShadow.reset();
+	this->SmartLive.reset();
 	this->ModeToDialog(2);
 
 	// the profile tables live in the engine, a client only names the one it wants
@@ -1778,7 +1787,7 @@ int FANCONTROL::WorkThread() {
 	// Separate signed MSR module; no EC mutex is held here.
 	// The observer is opt-in and never changes fan ownership.
 	this->CpuMsrFrame = cpu_msr::Frame{};
-	if (this->SmartMsrShadow && this->SmartShadow.enabled()) {
+	if ((this->SmartMsrShadow && this->SmartShadow.enabled()) || this->SmartLive.enabled()) {
 		if (this->CpuWorkerEpoch != this->CpuPollEpoch) {
 			this->CpuMsr.close();
 			this->CpuMsrAttempted = false;

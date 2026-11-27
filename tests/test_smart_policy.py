@@ -31,9 +31,10 @@ def test_production_shadow_observer_has_no_actuator(tmp_path):
     root = Path(__file__).resolve().parents[1]
     source = (root / "fancontrol/fanstuff.cpp").read_text(encoding="utf-8-sig")
     start = source.index("void FANCONTROL::ObserveSmartShadow() {")
-    stop = source.index("void FANCONTROL::SmartControl(void) {", start)
+    stop = source.index("// Live opt-in", start)
     observer = source[start:stop]
-    assert "this->ObserveSmartShadow();\n\t\tthis->SmartControl();" in source
+    assert "this->ObserveSmartShadow();" in source
+    assert "this->SmartControl();" in source
     # Compile the real observer with no hardware/SetFan interface at all.
     harness = r'''
 #include "smart_shadow.h"
@@ -80,6 +81,10 @@ int main() {
     f.SmartMsrShadow=true; f.MaxTemp=40; tick=1000;
     f.CpuMsrFrame.valid=true; f.CpuMsrFrame.time_ms=tick;
     f.CpuMsrFrame.package=85; f.CpuMsrFrame.hottest=85;
+    f.ObserveSmartShadow();
+    assert(f.message.find("temp=85, valid=1") != std::string::npos);
+    f.SmartShadow.reset(); f.message.clear();
+    f.MaxTemp=0;
     f.ObserveSmartShadow();
     assert(f.message.find("temp=85, valid=1") != std::string::npos);
     f.SmartShadow.reset(); f.message.clear();
@@ -150,6 +155,7 @@ struct FANCONTROL {
     int State=0, hwndDialog=0, ec_ok=1;
     cpu_msr::Frame CpuMsrFrame;
     struct Shadow {bool enabled() const{return true;}} SmartShadow;
+    struct Live {bool enabled() const{return false;}} SmartLive;
     struct Reader {
         int opens=0, closes=0, samples=0, resets=0;
         bool open(const wchar_t*){++opens;return true;}
@@ -201,3 +207,65 @@ def test_nvme_ui_is_separate_from_fan_control():
         assert forbidden not in observer
     worker = source.split("int FANCONTROL::WorkThread() {", 1)[1].split("\n}", 1)[0]
     assert "NvmeMonitor" not in worker
+
+def test_smart_live(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "smart-live"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tests/smart_live_test.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_actual_live_actuator_uses_confirmed_state(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "fancontrol/fanstuff.cpp").read_text(encoding="utf-8-sig")
+    start = source.index("bool FANCONTROL::SmartLiveControl() {")
+    end = source.index("void FANCONTROL::LogCpuMsr()", start)
+    assert "if (this->SmartLive.enabled() && this->SingleFan)" in source
+    harness = r'''
+#include "smart_live.h"
+#include <cassert>
+bool g_clientMode=false;
+uint64_t tick=0;
+uint64_t GetTickCount64(){return tick;}
+struct FANCONTROL {
+    smart_policy::Live SmartLive;
+    bool ActiveMode=true, SingleFan=true, isPowerSuspendState=false, restorePending=false;
+    bool FanCommandPending=false;
+    int MaxTemp=0, writes=0, requested=-1;
+    uint64_t CpuPollEpoch=0, CpuEpoch=0;
+    cpu_msr::Frame CpuMsrFrame;
+    struct {char FanCtrl=1;} State;
+    bool SmartLiveControl();
+    bool SetFan(const char*,int level){++writes;requested=level;FanCommandPending=true;return true;}
+};
+'''
+    main = r'''
+int main(){
+    FANCONTROL f;
+    assert(f.SmartLive.configure("50 3000 10000 2000 85 70 5000 ; 40 2500 80 4000 ; 1 2500 2 3000 3 3500 4 4000"));
+    f.CpuMsrFrame.valid=true; f.CpuMsrFrame.package=70; f.CpuMsrFrame.hottest=75;
+    for(tick=1000;tick<=4000;tick+=1000){
+        f.CpuMsrFrame.time_ms=tick;
+        assert(f.SmartLiveControl());
+    }
+    assert(f.writes==1&&f.requested==2&&f.State.FanCtrl==1);
+    f.CpuMsrFrame.time_ms=tick;
+    assert(f.SmartLiveControl()&&f.writes==1);
+    f.FanCommandPending=false;f.State.FanCtrl=2;
+    ++tick;f.CpuMsrFrame.time_ms=tick;
+    assert(f.SmartLiveControl()&&f.writes==1);
+    g_clientMode=true;
+    assert(f.SmartLiveControl()&&f.writes==1);
+    g_clientMode=false;
+    f.CpuMsrFrame.package=86;f.CpuMsrFrame.hottest=86;
+    assert(f.SmartLiveControl()&&f.requested==128&&f.writes==2);
+}
+'''
+    code = tmp_path / "live-actuator.cpp"
+    code.write_text(harness + source[start:end] + main)
+    exe = tmp_path / "live-actuator"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(code), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)

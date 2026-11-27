@@ -28,6 +28,7 @@
 #include <mutex>
 #include <string>
 #include "smart_shadow.h"
+#include "smart_live.h"
 #include "cpu_msr_win.h"
 #include "nvme_monitor.h"
 
@@ -250,6 +251,10 @@ protected:
 	bool HandleData();
 
 	smart_policy::Shadow SmartShadow;
+	smart_policy::Live SmartLive;
+	bool SmartLiveControl();
+	void LogCpuMsr();
+	uint64_t LastCpuMsrLog=0;
 	// Opt-in observer only. Worker publishes a frame before WM__NEWDATA;
 	// dialog consumes it after joining that worker.
 	bool SmartMsrShadow = false;

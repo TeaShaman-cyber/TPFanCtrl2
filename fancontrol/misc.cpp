@@ -49,6 +49,7 @@ FANCONTROL::ReadConfig(const char* configfile)
 
 	this->IndSmartLevel = 0;
 	this->SmartShadow = smart_policy::Shadow{};
+	this->SmartLive = smart_policy::Live{};
 	this->SmartMsrShadow = false;
 	bool msrShadowSeen = false;
 	this->NvmeMonitorEnabled = false;
@@ -90,6 +91,12 @@ FANCONTROL::ReadConfig(const char* configfile)
 				this->SmartMsrShadow = !msrShadowSeen && value[0] == '1' &&
 					value[1 + strspn(value + 1, " \t\r\n")] == 0;
 				msrShadowSeen = true;
+				continue;
+			}
+
+			if (_strnicmp(buf, "SmartLive=", 10) == 0) {
+				if (!this->SmartLive.configure(buf + 10))
+					this->Trace("SmartLive: invalid or duplicate configuration, disabled");
 				continue;
 			}
 

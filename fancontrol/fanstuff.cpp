@@ -317,8 +317,11 @@ bool FANCONTROL::HandleData(void) {
 	}
 
 	const bool reconcile = this->FanCommandPending || (!SingleFan && State.FanCtrl != State.Fan2Ctrl);
-	if (this->CurrentMode != 2)
+	if (this->CurrentMode != 2) {
 		this->SmartShadow.reset();
+		this->SmartLive.reset();
+	}
+	this->LogCpuMsr();
 
 	switch (this->CurrentMode) {
 
@@ -349,7 +352,10 @@ bool FANCONTROL::HandleData(void) {
 
 	case 2: // Smart
 		this->ObserveSmartShadow();
-		this->SmartControl();
+		if (this->SmartLive.enabled() && this->SingleFan)
+			ok = this->SmartLiveControl();
+		else
+			this->SmartControl();
 		break;
 
 	case 3: // Manual
@@ -437,6 +443,39 @@ void FANCONTROL::ObserveSmartShadow() {
 		    temperature, valid ? 1 : 0, observed, result.projected);
 		this->Trace(message);
 	}
+}
+
+// Live opt-in uses the same pure policy, but real confirmed EC state.
+bool FANCONTROL::SmartLiveControl() {
+	if (g_clientMode || !this->ActiveMode || !this->SingleFan ||
+	    this->isPowerSuspendState || this->restorePending) {
+		this->SmartLive.reset();
+		return true;
+	}
+	const auto action = this->SmartLive.evaluate(GetTickCount64(),
+	    this->CpuMsrFrame, this->MaxTemp, static_cast<unsigned char>(this->State.FanCtrl),
+	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true);
+	if (action.kind == smart_policy::Kind::Hold)
+		return true;
+	return this->SetFan(action.kind == smart_policy::Kind::Firmware ?
+	    "SmartLive thermal failsafe" : "SmartLive", action.level);
+}
+
+void FANCONTROL::LogCpuMsr() {
+	if ((!this->SmartLive.enabled() && !this->SmartMsrShadow) || g_clientMode)
+		return;
+	const auto now = GetTickCount64();
+	if (this->LastCpuMsrLog && now-this->LastCpuMsrLog < 15000)
+		return;
+	this->LastCpuMsrLog=now;
+	int t=0;
+	const bool valid=this->CpuPollEpoch==this->CpuEpoch &&
+	    cpu_msr::shadow_temperature(this->CpuMsrFrame,now,this->MaxTemp,t);
+	char msg[160];
+	sprintf_s(msg,sizeof(msg),"CPU MSR: valid=%d package=%d hottest=%d EC=%d selected=%d power_valid=%d watts=%.2f",
+	    valid?1:0,this->CpuMsrFrame.package,this->CpuMsrFrame.hottest,this->MaxTemp,t,
+	    this->CpuMsrFrame.power_valid?1:0,this->CpuMsrFrame.watts);
+	this->Trace(msg);
 }
 
 void FANCONTROL::SmartControl(void) {

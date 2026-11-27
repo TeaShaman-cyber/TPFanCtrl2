@@ -206,3 +206,18 @@ read owns only its result; one stalled disk read cannot stall the
 fan engine, and stale observations become unavailable. No guarantee
 of every controller/USB/RAID transport being supported is made.
 Monitoring requires the interactive instance to be running.
+
+#### Experimental active Smart policy
+
+`SmartLive=` accepts the same explicit calibration/curve format as
+`SmartShadow=`. It is opt-in and currently only supports a single fan.
+In Smart mode it replaces (not supplements) the legacy table controller.
+It uses fresh CPU MSR readings even if the EC temperature is quarantined,
+and never discards a hotter valid EC observation. This is CPU/platform
+observation, not proof that every platform sensor is covered. Manual mode
+continues to work normally. The observer logs CPU temperature and package
+power about every 15 seconds, including in manual mode. Power is not yet
+an actuator input. Invalid/stale CPU data, command failure or the urgent
+temperature still use the existing firmware fail-safe. Firmware is not
+the ordinary target of a healthy temperature curve. Do not activate an
+unvalidated calibration on a live system.

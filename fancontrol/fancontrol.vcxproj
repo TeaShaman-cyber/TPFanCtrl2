@@ -284,6 +284,7 @@
     <ClInclude Include="nvme_monitor.h" />
     <ClInclude Include="cpu_msr.h" />
     <ClInclude Include="cpu_msr_win.h" />
+    <ClInclude Include="smart_live.h" />
     <ClInclude Include="smart_policy.h" />
     <ClInclude Include="smart_shadow.h" />
     <ClInclude Include="SystemTraySDK.h" />

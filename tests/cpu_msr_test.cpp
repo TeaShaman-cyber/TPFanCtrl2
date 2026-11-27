@@ -17,7 +17,8 @@ int main(){
  assert(shadow_temperature(f,1250,80,selected)&&selected==80);
  assert(!shadow_temperature(f,1501,60,selected));
  assert(!shadow_temperature(f,999,60,selected));
- assert(!shadow_temperature(f,1250,0,selected));
+ assert(shadow_temperature(f,1250,0,selected)&&selected==72);
+ assert(shadow_temperature(f,1250,128,selected)&&selected==72);
  f.hottest=0;
  assert(!shadow_temperature(f,1250,60,selected));
  Energy power;

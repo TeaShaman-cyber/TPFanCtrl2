@@ -39,9 +39,9 @@ struct Frame {
 // Never let CPU telemetry hide a hotter valid platform observation.
 inline bool shadow_temperature(const Frame& f, uint64_t now, int ec, int& out) {
     if (!f.valid || now < f.time_ms || now-f.time_ms > 500 ||
-        ec <= 0 || ec > 110 || f.package <= 0 || f.package > 125 ||
+        f.package <= 0 || f.package > 125 ||
         f.hottest <= 0 || f.hottest > 125) return false;
-    out = ec;
+    out = ec > 0 && ec <= 110 ? ec : 0;
     if (f.package > out) out = f.package;
     if (f.hottest > out) out = f.hottest;
     return true;
