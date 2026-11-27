@@ -38,10 +38,45 @@ sustained demand (shorter for increases, longer for decreases); at most one
 adjacent step per confirmed transition. A transient that clears the threshold
 cancels its pending transition. A pending command does not count as applied.
 Reset history on manual/Smart transitions, suspend/resume, discontinuities,
-and profile changes. Invalid or stale thermal input and urgent credible
-temperature bypass dwell and return to firmware cooling; normal smoothing
-must never hide an urgent sample. Distinguish handback from reacquisition
-and require valid cooling-side evidence before resuming host control.
+and profile changes. Normal smoothing must never hide an urgent sample.
+
+### Revised control authority (2026-11-27, issue #289, iterations 137–138)
+
+The host policy is a workaround for the known R17 firmware fan-regulation
+defect, not an enhancement that assumes the firmware automatic regulator
+is trustworthy. Vendor contact and defect localization continue separately;
+a vendor fix, commitment, release date or acceptance is not established.
+The host solution must not depend on any of them. No firmware modification
+or disabling of CPU/platform hardware thermal protections is in scope.
+
+The earlier universal automatic handback assumption is superseded.
+The following are design requirements for the next candidate, not claims
+about the existing implementation or demonstrated hardware safety.
+
+| Condition | Required behavior / evidence |
+| --- | --- |
+| Fresh valid thermal frame, confirmed running calibrated level, late poll | Retain host ownership. Discard unobserved dwell credit; use current measured demand. An isolated scheduling delay is not a thermal emergency. Repeated gaps require a bounded response that cannot starve rising cooling demand. |
+| Urgent credible temperature | Bypass ordinary dwell. Evaluate a verified high-cooling fixed command under host control. Do not assume the top calibrated ordinary step is adequate emergency cooling. Preserve independent CPU/platform protections. |
+| Invalid or stale thermal frame, command path still available | No downward transition based on unknown temperature. Evaluate conservative fixed cooling with explicit fault state and recovery evidence, not an automatic return to the defective policy. |
+| Failed EC read/write or inconsistent confirmation | Distinguish telemetry failure from actual loss of actuator authority. A fixed command and a BIOS command both use the EC interface; neither can be claimed applied without verified readback. Escalate an unresolved loss of authority rather than pretend cooling is confirmed. |
+| Explicit BIOS selection, shutdown, suspend, service ownership loss | Separate lifecycle cases, not ordinary Smart control. Preserve existing protective lifecycle behavior until an alternative is demonstrated safe; operator selection remains authoritative. |
+
+The host controls requested fan levels through the existing EC command
+interface. It does not directly own PWM or replace the embedded RPM loop:
+fixed levels may still encounter the retained PWM-floor defect. A command
+readback confirms the control byte, not physical RPM, heat removal or
+safety. Before choosing a high-cooling fallback, validate command support,
+spin-up, physical response and thermal effectiveness on this model. If the
+host cannot command cooling, evaluate available platform protections and a
+safe relinquishment/escalation path separately. No unvalidated replacement
+for the existing emergency or lifecycle protections is deployable.
+
+Observed triggers motivating this revision: gaps of 2640 ms at selected
+69 C (CPU age 15 ms) and 2828 ms at selected 77 C (CPU age 63 ms) both
+caused BIOS handback under the previous 2000 ms guard. Neither was an
+urgent thermal sample. The c651c7d bounded-gap candidate is an intermediate
+offline/CI experiment only, not a hardware-approved solution. Its remaining
+automatic handbacks and repeated-gap behavior require review.
 
 Thresholds, durations and RPM table are explicit experiment parameters,
 not universal device defaults. For L14 the prior provisional upper target
@@ -56,7 +91,12 @@ user mode. Preserve the user's active selection during development.
 1. RED/GREEN deterministic tests on real decision code: short spike,
    sustained warming, cooling dwell, oscillation, adjacent transitions,
    urgent/invalid/stale input, time discontinuity, command failure,
-   manual override and recovery; legacy default parity.
+   manual override and recovery; legacy default parity. In particular,
+   reproduce both observed delayed polls, repeated/long/nonmonotonic gaps,
+   stale/invalid temperatures, high demand during timing faults, stopped
+   fan, failed writes and false or delayed confirmations. Prove no
+   unobserved downward dwell credit and no starvation of urgent cooling.
+   Fault recovery must not produce recurrent host/firmware oscillation.
 2. Replay measured traces offline against legacy Smart; compare number of
    changes, maximum temperature and time above temperature bands where
    measured. Replay cannot establish the physical outcome of a different
@@ -74,7 +114,8 @@ user mode. Preserve the user's active selection during development.
    acceptance.
 
 First offline implementation: see the core plan and fancontrol/smart_policy.h.
-The decision core is not wired to the shipping application. Integration and
-hardware acceptance remain separate. Additional objective: reduce needless
+The decision core is integrated in the experimental candidate branch.
+The revised authority requirements above are not yet implemented or accepted.
+Integration, candidate CI and hardware acceptance remain separate. Additional objective: reduce needless
 fan revolutions and airflow exposure as wear/dust proxies; neither is a
 validated bearing-lifetime or dust-accumulation model.
