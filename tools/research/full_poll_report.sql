@@ -42,3 +42,31 @@ WITH runs AS (
  SELECT run,count(*) AS n,max(now)-min(now) AS duration_ms FROM runs WHERE joint_permit GROUP BY run
 )
 SELECT coalesce(max(duration_ms),0) AS longest_joint_window_ms,coalesce(max(n),0) AS longest_joint_window_polls FROM eligible;
+
+-- Episodes are intervals of observed bad samples, not physical outage durations.
+-- Break at any missing poll, time discontinuity, epoch change or quality recovery.
+-- A one-sample episode has zero observed span; recovery is separately measured.
+WITH state AS (
+ SELECT *, lag(joint_permit) OVER (ORDER BY seq) AS previous_permit,
+   lead(joint_permit) OVER (ORDER BY seq) AS next_permit,
+   lead(contiguous) OVER (ORDER BY seq) AS next_contiguous,
+   lead(now) OVER (ORDER BY seq) AS next_now
+ FROM gated
+), numbered AS (
+ SELECT *,sum(CASE WHEN NOT coalesce(contiguous,false)
+                     OR previous_permit IS DISTINCT FROM joint_permit THEN 1 ELSE 0 END)
+                  OVER (ORDER BY seq ROWS UNBOUNDED PRECEDING) AS episode
+ FROM state
+), episodes AS (
+ SELECT episode,min(seq) AS first_seq,max(seq) AS last_seq,count(*) AS samples,
+   max(now)-min(now) AS observed_span_ms,
+   CASE WHEN last(next_contiguous ORDER BY seq) AND last(next_permit ORDER BY seq)
+        THEN last(next_now ORDER BY seq)-min(now) END AS first_bad_to_recovery_ms,
+   count_if(NOT thermal_permit) AS thermal_bad,
+   count_if(tach_quality<>'dual' OR rpm_b=0) AS tach_bad,
+   count_if(NOT thermal_permit AND (tach_quality<>'dual' OR rpm_b=0)) AS both_bad
+ FROM numbered WHERE NOT joint_permit GROUP BY episode
+)
+SELECT * FROM episodes ORDER BY first_seq;
+SELECT thermal_permit, tach_quality, count(*) AS polls
+FROM gated GROUP BY thermal_permit,tach_quality ORDER BY thermal_permit,tach_quality;

@@ -606,3 +606,36 @@ int main(){
     subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                     "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
+
+
+def test_full_poll_replay(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "full-replay"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tools/research/replay_full_poll.cpp"),
+                    "-o", str(exe)], check=True)
+    cfg = "100 6000 12000 2000 85 70 5000 2000 ; 60 2550 70 2550 80 3650 84 4150 ; 1 2550 2 3050 3 3300 4 3650 5 4150"
+
+    def row(seq, t, hi=1, package=60, epoch=0, poll_epoch=0, cpu_age=50, ok=1):
+        return ",".join(map(str, [seq,ok,t-800,t-700,t-100,t-50,t,
+            epoch,poll_epoch,1,3,1,1,60,60,1,60,1,3650,1,1,3650,1,hi,
+            1,t-cpu_age,package,60,1,1,0]))+"\n"
+
+    def run(rows):
+        p = subprocess.run([str(exe),cfg,"4"],input="".join(rows),
+                           text=True,capture_output=True,check=True)
+        return [x.split(",") for x in p.stdout.splitlines()]
+
+    out=run([row(i,i*1000,hi=0 if i==13 else 1) for i in range(1,27)])
+    assert out[12][5:10]==["0","4","fall_dwell","3","4"]
+    assert out[12][10:]==["none","-1"]
+    assert out[25][10:]==["fall_dwell","3"]
+    # Missing tach cannot suppress an independently valid urgent MSR.
+    out=run([row(1,1000,hi=0,package=90)])
+    assert out[0][10:]==["urgent_temperature","128"]
+    # An old MSR or epoch mismatch cannot be substituted with a cold EC.
+    for r in [row(1,1000,cpu_age=501),row(1,1000,epoch=1),row(1,1000,ok=0)]:
+        assert run([r])[0][10:]==["invalid_input","128"]
+    # Missing sequence breaks the simulated dwell even if timestamps are close.
+    out=run([row(i,i*1000) for i in range(1,13)]+[row(14,13000)])
+    assert out[-1][10:]==["none","-1"]
