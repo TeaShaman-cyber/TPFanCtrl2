@@ -122,7 +122,7 @@ public:
 		recovering_ = false;
 	}
 	unsigned long long last_gap() const { return last_gap_; }
-	Action evaluate(const Sample& s) {
+	Action evaluate(const Sample& s, bool allow_decrease = true) {
 		if (!s.smart) {
 			reset();
 			return hold();
@@ -138,7 +138,7 @@ public:
 		const auto thermal_reason = !thermal_valid ? Reason::InvalidInput :
 		    s.temperature >= config_.urgent ? Reason::UrgentTemperature : Reason::None;
 		if (emergency_level_ && !fault_lost_ && (fault_ || thermal_reason != Reason::None))
-			return host_fault(s, thermal_reason, late, nonmonotonic);
+			return host_fault(s, thermal_reason, late, nonmonotonic, allow_decrease);
 		if (thermal_reason != Reason::None) return handback(s, thermal_reason);
 		if (nonmonotonic) return handback(s, Reason::PollDiscontinuity);
 		if (pending_ != -1) {
@@ -165,7 +165,7 @@ public:
 				recovering_ = false;
 				return {Kind::Hold, -1, Reason::PollGapReanchor};
 			}
-			if (s.temperature > config_.recover) {
+			if (!allow_decrease || s.temperature > config_.recover) {
 				recovering_ = false;
 				return hold();
 			}
@@ -221,6 +221,8 @@ public:
 		// observations of upward demand, without an intervening reversal or
 		// level change, may advance one confirmed adjacent step. This prevents
 		// frequent timing gaps from indefinitely starving cooling.
+		// Do not carry fall dwell through a feedback-quality veto.
+		if (direction < 0 && !allow_decrease) direction = 0;
 		if (direction <= 0) late_up_ = false;
 		if (late) {
 			direction_ = 0;
@@ -261,7 +263,7 @@ public:
 	}
 private:
 	static Action hold() { return {Kind::Hold, -1}; }
-	Action host_fault(const Sample& s, Reason thermal_reason, bool late, bool nonmonotonic) {
+	Action host_fault(const Sample& s, Reason thermal_reason, bool late, bool nonmonotonic, bool allow_decrease) {
 		if (!fault_) {
 			fault_ = true;
 			firmware_ = false;
@@ -290,7 +292,7 @@ private:
 			return request(emergency_level_,s.time_ms,
 			    thermal_reason == Reason::None ? Reason::UnconfirmedLevel : thermal_reason);
 		}
-		if (thermal_reason != Reason::None || s.temperature > config_.recover || late) {
+		if (!allow_decrease || thermal_reason != Reason::None || s.temperature > config_.recover || late) {
 			recovering_ = false;
 			return hold();
 		}

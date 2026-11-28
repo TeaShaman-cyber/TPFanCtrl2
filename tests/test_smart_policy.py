@@ -505,3 +505,50 @@ int main(){
     subprocess.run([str(exe)], check=True)
     dispatch = (root / "fancontrol/fancontrol.cpp").read_text(encoding="utf-8-sig")
     assert "if (joined && !g_clientMode) this->ObserveEcTachQuality(ok != 0);" in dispatch
+
+
+def test_joint_feedback_research(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "joint-feedback"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tests/joint_feedback_test.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_joint_feedback_replay_faults(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "joint-replay"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tools/research/replay_joint_feedback.cpp"),
+                    "-o", str(exe)], check=True)
+    cfg = "100 6000 12000 2000 85 70 5000 2000 ; 60 2550 70 2550 80 3650 84 4150 ; 1 2550 2 3050 3 3300 4 3650 5 4150"
+
+    def row(t, a=3650, b=3650, ar=1, br=1, ta=60, tb=60, tr=1, epoch=1, fresh=1):
+        return f"{t-700} {t-50} {t} {a} 1 {ar} {ta} 1 {b} 1 {br} {tb} {tr} {fresh} {epoch}\n"
+
+    def run(rows, seed="4"):
+        r = subprocess.run([str(exe), cfg, seed], input="".join(rows), text=True,
+                           capture_output=True, check=True)
+        return [x.split() for x in r.stdout.splitlines()]
+
+    # The same fault immediately before expiry of downward dwell:
+    # loss of one tach byte, both tach readings, sensor disagreement,
+    # stopped-vs-running conflict, or a single temperature.
+    faults = [dict(br=0), dict(ar=0, br=0), dict(b=4000),
+              dict(a=0, b=100), dict(tr=0), dict(tb=68)]
+    for fault in faults:
+        out = run([row(t, **(fault if t==13000 else {}))
+                   for t in range(1000, 27000, 1000)])
+        assert out[12][6:10] == ["0", "4", "fall_dwell", "3"]
+        assert out[12][10:] == ["4", "none", "-1"]
+        assert all(x[12]=="-1" for x in out[13:25])
+        assert out[25][11:] == ["fall_dwell","3"]
+    # Stale acquisition or wrong epoch must not support a thermal decision.
+    for fault in [dict(fresh=0),dict(epoch=0)]:
+        out=run([row(1000, **fault)])
+        assert out[0][8:10] == ["invalid_input","128"]
+        assert out[0][11:] == ["invalid_input","128"]
+    # Actual high temperature remains an urgent handback even without tach.
+    out=run([row(1000, ta=85,tb=85,ar=0,br=0)])
+    assert out[0][11:] == ["urgent_temperature","128"]
