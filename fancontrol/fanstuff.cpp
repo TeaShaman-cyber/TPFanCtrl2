@@ -854,7 +854,32 @@ void FANCONTROL::FreeECAccess() {
 //-------------------------------------------------------------------------
 //  read fan and temperatures from embedded controller
 //-------------------------------------------------------------------------
+// Diagnostic only: never call SetFan or change the existing control input.
+void FANCONTROL::ObserveEcTempGate(bool poll_ok) {
+    if (!this->EcTempReport) return;
+    this->EcTempReport = false;
+    const auto now = GetTickCount64();
+    const auto& f = this->EcTempFrame;
+    const bool epoch = this->CpuPollEpoch == this->CpuEpoch &&
+        !this->isPowerSuspendState && !this->restorePending;
+    const bool ordered = this->SmartPoll.ordered(0, now) &&
+        this->SmartPoll.worker <= f.begin && f.end <= this->SmartPoll.ec_done;
+    // Provisional diagnostic budget, measured from the oldest possible
+    // acquisition, not from logging time. No control authority.
+    const auto q = ec_temp::assess(f, now, epoch, poll_ok && ordered, 2000);
+    char msg[160];
+    sprintf_s(msg, sizeof(msg),
+        "EcTempShadow gate tick=%llu pair=%llu value=%d delta=%d age=%llu fresh=%d decrease=%d epoch=%d",
+        static_cast<unsigned long long>(now), static_cast<unsigned long long>(f.end),
+        q.value, q.delta, static_cast<unsigned long long>(f.begin && now >= f.begin ? now-f.begin : 0),
+        q.fresh ? 1 : 0, q.allow_decrease ? 1 : 0, epoch ? 1 : 0);
+    this->Trace(msg);
+}
+
 bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
+	this->EcTempFrame = ec_temp::Frame{};
+	this->EcTempReport = this->SingleFan && !this->UseTWR && this->EcTelemetryWaitMs >= 0 &&
+	    (!this->ShowBiasedTemps || this->SensorOffset[0].offs == 0);
 	FCSTATE sample1, sample2;
 	const int numTries = 10;
 	const int sleepTicks = 200;
@@ -901,6 +926,9 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 				const unsigned t2 = static_cast<unsigned char>(sample2.Sensors[0]);
 				const bool suspect = (hi1<<8|lo1)>0x1fff || (hi2<<8|lo2)>0x1fff ||
 				    t1==hi1 || t2==hi2;
+				const bool rawTemp = this->EcTempReport;
+				if (rawTemp) this->EcTempFrame = {start, now, t1, t2, r1[2], r2[2]};
+				this->EcTempReport = rawTemp && (suspect || !this->LastEcAuditLog || now-this->LastEcAuditLog >= 10000);
 				if (suspect || !this->LastEcAuditLog || now-this->LastEcAuditLog >= 10000) {
 					char msg[160];
 					sprintf_s(msg,sizeof(msg),

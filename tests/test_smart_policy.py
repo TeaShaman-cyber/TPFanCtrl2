@@ -374,3 +374,70 @@ def test_msr_reader_ages_from_start_and_rejects_multiple_groups():
     assert "if(!group_count || group_count()!=1)return false;" in source
     assert "frame.time_ms=start;" in source
     assert "GetTickCount64()-start>250" in source
+
+
+def test_ec_temperature_gate(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "ec-temp-gate"
+    subprocess.run(
+        ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+         "-I", str(root / "fancontrol"), str(root / "tests/ec_temp_gate_test.cpp"),
+         "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_ec_temperature_gate_observer(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "fancontrol/fanstuff.cpp").read_text(encoding="utf-8-sig")
+    start = source.index("void FANCONTROL::ObserveEcTempGate(")
+    end = source.index("bool FANCONTROL::ReadEcStatus(", start)
+    observer = source[start:end]
+    code = r'''
+#include "ec_temp_quality.h"
+#include "smart_live.h"
+#include <cassert>
+#include <cstdio>
+#include <string>
+#define sprintf_s std::snprintf
+uint64_t tick=2000;
+uint64_t GetTickCount64(){return tick;}
+struct FANCONTROL {
+    bool EcTempReport=true, isPowerSuspendState=false, restorePending=false;
+    ec_temp::Frame EcTempFrame{1000,1700,70,72,1,1};
+    smart_policy::PollTiming SmartPoll{900,950,1750,1800,1900};
+    uint64_t CpuPollEpoch=1,CpuEpoch=1;
+    std::string msg;
+    void Trace(const char* s){msg=s;}
+    void ObserveEcTempGate(bool);
+};
+''' + observer + r'''
+int main(){
+    FANCONTROL a; a.ObserveEcTempGate(true);
+    assert(a.msg.find("value=72 delta=2 age=1000 fresh=1 decrease=1 epoch=1")!=std::string::npos);
+    assert(!a.EcTempReport);
+    a.msg.clear();a.ObserveEcTempGate(true);assert(a.msg.empty());
+    FANCONTROL b; ++b.CpuEpoch;b.ObserveEcTempGate(true);
+    assert(b.msg.find("fresh=0 decrease=0 epoch=0")!=std::string::npos);
+    FANCONTROL c;c.SmartPoll.dispatch=0;c.ObserveEcTempGate(true);
+    assert(c.msg.find("fresh=0 decrease=0")!=std::string::npos);
+    FANCONTROL d;d.SmartPoll.worker=1001;d.ObserveEcTempGate(true);
+    assert(d.msg.find("fresh=0 decrease=0")!=std::string::npos);
+    FANCONTROL e;e.ObserveEcTempGate(false);
+    assert(e.msg.find("fresh=0 decrease=0")!=std::string::npos);
+    FANCONTROL f;f.restorePending=true;f.ObserveEcTempGate(true);
+    assert(f.msg.find("fresh=0 decrease=0 epoch=0")!=std::string::npos);
+    FANCONTROL g;g.EcTempFrame={};g.ObserveEcTempGate(false);
+    assert(g.msg.find("value=-1 delta=-1 age=0 fresh=0 decrease=0")!=std::string::npos);
+    FANCONTROL h;tick=3001;h.ObserveEcTempGate(true);
+    assert(h.msg.find("age=2001 fresh=0 decrease=0")!=std::string::npos);
+}
+'''
+    cpp = tmp_path / "gate_observer.cpp"
+    cpp.write_text(code)
+    exe = tmp_path / "gate_observer"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                    "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+    dispatch = (root / "fancontrol/fancontrol.cpp").read_text(encoding="utf-8-sig")
+    assert "joined = ::WaitForSingleObject(this->hThread, INFINITE) == WAIT_OBJECT_0;" in dispatch
+    assert "if (joined && !g_clientMode) this->ObserveEcTempGate(ok != 0);" in dispatch

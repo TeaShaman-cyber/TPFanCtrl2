@@ -1335,8 +1335,9 @@ ULONG FANCONTROL::OnEndSession() {
 //  WM__NEWDATA handler
 //-------------------------------------------------------------------------
 ULONG FANCONTROL::OnNewData(WPARAM mp1) {
+	bool joined = false;
 	if (this->hThread) {
-		::WaitForSingleObject(this->hThread, INFINITE);
+		joined = ::WaitForSingleObject(this->hThread, INFINITE) == WAIT_OBJECT_0;
 		if (this->hThread)
 			::CloseHandle(this->hThread);
 		else {
@@ -1351,6 +1352,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 
 	this->DrainTrace();
 	ULONG ok = mp1;  // equivalent of "ok = this->ReadEcStatus(&this->State);" via thread
+	if (joined && !g_clientMode) this->ObserveEcTempGate(ok != 0);
 
 	if (ok) {
 		this->ReadErrorCount = 0;

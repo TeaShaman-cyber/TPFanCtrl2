@@ -9,6 +9,7 @@ def test_ec_pair_audit(tmp_path):
     start = src.index("bool FANCONTROL::ReadEcStatus(")
     end = src.index("bool FANCONTROL::ReadEcRaw(", start)
     code = r"""
+#include "ec_temp_quality.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -25,6 +26,8 @@ struct FANCONTROL {
     int EcTelemetryWaitMs=30, EcAuditWaitMs=-1, EcReadReady[3]={-1,-1,-1};
     unsigned long long LastEcAuditLog=0;
     struct {int offs=0;} SensorOffset[12];
+    ec_temp::Frame EcTempFrame{};
+    bool EcTempReport=false;
     int reads=0, scenario=0;
     std::vector<int> budgets;
     std::string trace;
@@ -59,6 +62,8 @@ int main(){
     assert(f.trace.find("a=d4d4/9 obf=1,0,0 b=09d4/48 obf=1,1,1")!=std::string::npos);
     assert(f.trace.find("tries=1 lock=17 ms=217")!=std::string::npos);
     assert(f.budgets==std::vector<int>({30,30}));
+    assert(f.EcTempReport && f.EcTempFrame.begin==1000 && f.EcTempFrame.end==1217);
+    assert(f.EcTempFrame.a==9 && f.EcTempFrame.b==48 && f.EcTempFrame.ready_a==0 && f.EcTempFrame.ready_b==1);
     assert(f.trace.find("EcTempShadow tick=1217 value=48 source=B quality=single")!=std::string::npos);
     const char* expected[]={
         "value=72 source=A quality=single",
@@ -92,6 +97,9 @@ int main(){
     assert(dual.ReadEcStatus(&s)&&dual.trace.empty()&&dual.budgets==std::vector<int>({-1,-1}));
     FANCONTROL fail;fail.scenario=2;
     assert(!fail.ReadEcStatus(&s)&&fail.reads==20&&!fail.locked&&fail.EcAuditWaitMs==-1);
+    assert(fail.EcTempReport && fail.EcTempFrame.begin==0);
+    f.scenario=2; assert(!f.ReadEcStatus(&s) && f.EcTempFrame.begin==0);
+    assert(!disabled.EcTempReport && !dual.EcTempReport);
     assert(fail.budgets[0]==30&&fail.budgets[1]==30);
     for(unsigned i=2;i<fail.budgets.size();i++)assert(fail.budgets[i]==0);
 }
@@ -99,5 +107,5 @@ int main(){
     cpp = tmp_path / "audit.cpp"
     exe = tmp_path / "audit"
     cpp.write_text(code)
-    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)], check=True)
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
