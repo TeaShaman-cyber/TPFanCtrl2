@@ -52,7 +52,8 @@ struct FANCONTROL {
     cpu_msr::Frame CpuMsrFrame;
     unsigned long long CpuPollEpoch=0, CpuEpoch=0;
     bool ActiveMode = true, isPowerSuspendState = false, restorePending = false;
-    int MaxTemp = 40;
+    int MaxTemp = 40, ControlEcMax=0;
+    bool QualifiedThermalActive=false,ThermalFault=false;
     struct { char FanCtrl = 1; } State;
     std::string message;
     void Trace(const char* s) { message = s; }
@@ -248,6 +249,8 @@ struct FANCONTROL {
     std::string message;
     void Trace(const char* s){assert(std::string(s).size()<128);message+=s;message+="\n";}
     bool success=true;
+    bool QualifiedThermalActive=false, ThermalAllowDecrease=true, ThermalFault=false;
+    int ControlEcMax=0;
     bool SmartLiveControl();
     bool SetFan(const char*,int level){++writes;requested=level;FanCommandPending=true; return success;}
 };
@@ -310,6 +313,15 @@ int main(){
     assert(f.SmartLiveControl() && f.writes==4 && f.requested==2);
     assert(f.message.find("reason=late_rise")!=std::string::npos);
     assert(f.message.find("request=128")==std::string::npos);
+    FANCONTROL regression;
+    assert(regression.SmartLive.configure("100 6000 12000 2000 85 70 5000 2000 ; 60 2550 70 2550 80 3650 84 4150 ; 1 2550 2 3050 3 3300 4 3650 5 4150"));
+    tick=50000; regression.CpuMsrFrame.valid=true;
+    regression.CpuMsrFrame.time_ms=tick; regression.CpuMsrFrame.package=65; regression.CpuMsrFrame.hottest=64;
+    regression.MaxTemp=96; regression.QualifiedThermalActive=true; regression.ControlEcMax=66;
+    regression.ThermalAllowDecrease=false;
+    assert(regression.SmartLiveControl() && regression.writes==0);
+    ++tick; regression.CpuMsrFrame.time_ms=tick; regression.ThermalFault=true;
+    assert(regression.SmartLiveControl() && regression.writes==1 && regression.requested==128);
 
 
 }
@@ -605,4 +617,13 @@ int main(){
     exe = tmp_path / "full_poll"
     subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                     "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_qualified_thermal_input(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "qualified-thermal"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tests/qualified_thermal_test.cpp"),
+                    "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

@@ -25,6 +25,8 @@ struct FANCONTROL {
     struct FCSTATE {char FanCtrl, Fan2Ctrl, Fan1SpeedLo, Fan1SpeedHi, Sensors[12];};
     bool SingleFan=true, UseTWR=false, locked=false, ShowBiasedTemps=false;
     int EcTelemetryWaitMs=30, EcAuditWaitMs=-1, EcReadReady[3]={-1,-1,-1};
+    int EcExtraReady[12]{};
+    ec_temp::SlotPair EcSlots{};
     unsigned long long LastEcAuditLog=0;
     struct {int offs=0;} SensorOffset[12];
     ec_temp::Frame EcTempFrame{};
@@ -74,6 +76,7 @@ int main(){
     assert(f.EcTachFrame.a.rpm==0xd4d4 && f.EcTachFrame.b.rpm==0x09d4);
     assert(f.EcTachFrame.a.low_ready==1 && f.EcTachFrame.a.high_ready==0);
     assert(f.EcTachFrame.b.low_ready==1 && f.EcTachFrame.b.high_ready==1);
+    assert(f.EcSlots.begin==1000 && f.EcSlots.end==1217 && f.EcSlots.slots[0].a==9 && f.EcSlots.slots[0].b==48);
     assert(f.EcTempReport && f.EcTempFrame.begin==1000 && f.EcTempFrame.end==1217);
     assert(f.EcTempFrame.a==9 && f.EcTempFrame.b==48 && f.EcTempFrame.ready_a==0 && f.EcTempFrame.ready_b==1);
     assert(f.trace.find("EcTempShadow tick=1217 value=48 source=B quality=single")!=std::string::npos);

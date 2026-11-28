@@ -119,6 +119,12 @@ protected:
 	int EcTelemetryWaitMs = -1;
 	int EcAuditWaitMs = -1;
 	int EcReadReady[3] = {-1,-1,-1};
+	int EcExtraReady[12]{};
+	ec_temp::SlotPair EcSlots{};
+	ec_temp::HeatConfirmation EcHeat;
+	bool QualifiedThermalActive=false, ThermalAllowDecrease=true, ThermalFault=false;
+	int ControlEcMax=0;
+	void QualifyThermalInput(bool joined);
 	unsigned long long LastEcAuditLog = 0;
 	ec_temp::Frame EcTempFrame{}; // worker publishes, joined dialog consumes
 	bool EcTempReport = false;

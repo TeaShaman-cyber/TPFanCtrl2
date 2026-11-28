@@ -29,13 +29,15 @@ public:
         return true;
     }
     bool enabled() const {return enabled_;}
+    int urgent() const {return static_cast<int>(config_.urgent);}
     void reset(){policy_.reset();}
     Action evaluate(uint64_t now,const cpu_msr::Frame& cpu,int ec,int level,
-                    bool current_epoch,bool acknowledged,bool active, DecisionInput* input=nullptr) {
+                    bool current_epoch,bool acknowledged,bool active, DecisionInput* input=nullptr, bool allow_decrease=true, bool platform_fault=false) {
         int temperature=0;
-        const bool valid=current_epoch && cpu_msr::shadow_temperature(cpu,now,ec,temperature);
+        const bool thermal_valid=current_epoch && cpu_msr::shadow_temperature(cpu,now,ec,temperature);
+        const bool valid=thermal_valid && (!platform_fault || temperature>=config_.urgent);
         const auto action=policy_.evaluate({now,static_cast<double>(temperature),level,acknowledged,
-            enabled_ && valid,enabled_ && active});
+            enabled_ && valid,enabled_ && active},allow_decrease);
         if(input) *input={now,cpu.time_ms,policy_.last_gap(),ec,cpu.package,cpu.hottest,
             temperature,level,cpu.valid,current_epoch,enabled_ && valid,acknowledged};
         return action;

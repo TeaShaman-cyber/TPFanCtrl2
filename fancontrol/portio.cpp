@@ -365,13 +365,19 @@ FANCONTROL::ReadByteFromEC(int offset, char* pdata) {
 		// Only telemetry registers in the owned status poll; never alter
 		// command verification, layout selection or strict-mode semantics.
 		int* ready = nullptr;
+		bool secondary = false;
 		if (this->EcAuditWaitMs >= 0) {
 			if (ecOffset == 0x84) ready = &this->EcReadReady[0];
 			else if (ecOffset == 0x85) ready = &this->EcReadReady[1];
 			else if (ecOffset == 0x78) ready = &this->EcReadReady[2];
+            else if (ecOffset >= 0x79 && ecOffset <= 0x7f) {
+                ready = &this->EcExtraReady[ecOffset-0x78]; secondary = true;
+            } else if (ecOffset >= 0xc0 && ecOffset <= 0xc3) {
+                ready = &this->EcExtraReady[8+ecOffset-0xc0]; secondary = true;
+            }
 		}
 		if (ExecuteEcRead(ctx, *pdata, this->StrictEcReadObf,
-		    ready ? this->EcAuditWaitMs : -1, ready)) {
+		    ready ? (secondary ? 0 : this->EcAuditWaitMs) : -1, ready)) {
 			if (i > 0) {
 				sprintf_s(traceText, sizeof(traceText),
 					"readec: SUCCESS after layout switch to %s (ctrl=0x%04X data=0x%04X)",

@@ -321,6 +321,7 @@ bool FANCONTROL::HandleData(bool joined) {
 		this->SmartShadow.reset();
 		this->SmartLive.reset();
 	}
+	this->QualifyThermalInput(joined);
 	this->LogCpuMsr();
     // Capture the pre-command state; append the diagnostic only afterwards.
     const auto jointNow = GetTickCount64();
@@ -418,8 +419,16 @@ bool FANCONTROL::HandleData(bool joined) {
 	if (joined) this->LogJointPoll(true, jointNow, jointMode, jointLevel, jointAck, jointMax, ok != 0);
 	this->PreviousMode = this->CurrentMode;
 
-	if (this->CurrentMode == 3 && this->MaxTemp > this->ManModeExitInternal)
-		this->CurrentMode = 2;
+	if (this->CurrentMode == 3) {
+        int exitTemp=this->MaxTemp;
+        bool exitManual=false;
+        if (this->QualifiedThermalActive) {
+            const bool valid=this->CpuPollEpoch==this->CpuEpoch &&
+                cpu_msr::shadow_temperature(this->CpuMsrFrame,GetTickCount64(),this->ControlEcMax,exitTemp);
+            exitManual=!valid || this->ThermalFault;
+        }
+        if(exitManual || exitTemp>this->ManModeExitInternal) this->CurrentMode=2;
+    }
 
 	return ok;
 }
@@ -427,6 +436,44 @@ bool FANCONTROL::HandleData(bool joined) {
 //-------------------------------------------------------------------------
 //  smart fan control depending on temperature
 //-------------------------------------------------------------------------
+void FANCONTROL::QualifyThermalInput(bool joined) {
+    ControlEcMax=MaxTemp; ThermalAllowDecrease=true; ThermalFault=false;
+    QualifiedThermalActive=SmartLive.enabled() && SingleFan && !UseTWR && EcTelemetryWaitMs>=0;
+    for(int i=0;i<12;++i) if(SensorOffset[i].offs!=0) QualifiedThermalActive=false;
+    if(!QualifiedThermalActive) {EcHeat.reset();return;}
+    char list[128], what[16];
+    sprintf_s(list,sizeof(list),"|%s|",IgnoreSensors);
+    for(char* p=list;*p;++p) if(*p==',') *p='|';
+    unsigned mask=0;
+    for(int i=0;i<(NoExtSensor?8:12);++i) {
+        sprintf_s(what,sizeof(what),"|%s|",State.SensorName[i]);
+        if(!strstr(list,what) && !(ErraticSensorGuard && SensorErratic[i])) mask|=1u<<i;
+    }
+    const auto now=GetTickCount64();
+    const bool fresh=joined && CpuPollEpoch==CpuEpoch && !isPowerSuspendState &&
+        SmartPoll.ordered(0,now) && SmartPoll.worker<=EcSlots.begin &&
+        EcSlots.begin && EcSlots.begin<=EcSlots.end && EcSlots.end<=SmartPoll.ec_done &&
+        now-EcSlots.begin<=2000;
+    auto s=ec_temp::qualify_slots(EcSlots.slots,mask);
+    if(!fresh && MaxTemp>s.disputed && MaxTemp>s.confirmed) s.disputed=MaxTemp;
+    const auto d=EcHeat.evaluate(now,s,SmartLive.urgent(),2000,fresh,static_cast<unsigned char>(State.FanCtrl));
+    ControlEcMax=s.confirmed; ThermalAllowDecrease=d.allow_decrease; ThermalFault=d.fault;
+    if(s.disputed>=SmartLive.urgent() || d.fault) {
+        char msg[160];
+        sprintf_s(msg,sizeof(msg),"EcTempAdmission tick=%llu raw=%d confirmed=%d disputed=%d fresh=%d fault=%d",
+            static_cast<unsigned long long>(now),MaxTemp,s.confirmed,s.disputed,fresh?1:0,d.fault?1:0);
+        Trace(msg);
+        for(unsigned i=0;i<12;++i) if((mask&(1u<<i)) &&
+            (EcSlots.slots[i].a>=static_cast<unsigned>(SmartLive.urgent()) ||
+             EcSlots.slots[i].b>=static_cast<unsigned>(SmartLive.urgent()))) {
+            const auto& x=EcSlots.slots[i];
+            sprintf_s(msg,sizeof(msg),"EcTempSlot tick=%llu index=%u a=%u/%d b=%u/%d",
+                static_cast<unsigned long long>(now),i,x.a,x.ready_a,x.b,x.ready_b);
+            Trace(msg);
+        }
+    }
+}
+
 void FANCONTROL::ObserveSmartShadow() {
 	if (!this->SmartShadow.enabled() || g_clientMode || !this->ActiveMode ||
 	    this->isPowerSuspendState || this->restorePending) {
@@ -436,11 +483,12 @@ void FANCONTROL::ObserveSmartShadow() {
 	// Diagnostic only. No action from this observer may reach SetFan.
 	const int observed = static_cast<unsigned char>(this->State.FanCtrl);
 	const auto now = ::GetTickCount64();
-	int temperature = this->MaxTemp;
+	int temperature = this->QualifiedThermalActive?this->ControlEcMax:this->MaxTemp;
 	bool valid = temperature > 0 && temperature <= 110;
 	if (this->SmartMsrShadow) {
 		valid = this->CpuPollEpoch == this->CpuEpoch &&
-			cpu_msr::shadow_temperature(this->CpuMsrFrame, now, this->MaxTemp, temperature);
+			cpu_msr::shadow_temperature(this->CpuMsrFrame, now, this->QualifiedThermalActive?this->ControlEcMax:this->MaxTemp, temperature);
+        if (this->ThermalFault) valid=false;
 	}
 	const auto result = this->SmartShadow.observe(now, temperature, observed, valid);
 	if (result.action.kind != smart_policy::Kind::Hold) {
@@ -461,8 +509,9 @@ bool FANCONTROL::SmartLiveControl() {
 	}
 	smart_policy::DecisionInput input{};
 	const auto action = this->SmartLive.evaluate(GetTickCount64(),
-	    this->CpuMsrFrame, this->MaxTemp, static_cast<unsigned char>(this->State.FanCtrl),
-	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true, &input);
+	    this->CpuMsrFrame, this->QualifiedThermalActive ? this->ControlEcMax : this->MaxTemp, static_cast<unsigned char>(this->State.FanCtrl),
+	    this->CpuPollEpoch == this->CpuEpoch, !this->FanCommandPending, true, &input,
+        this->ThermalAllowDecrease, this->ThermalFault);
 	const bool command = action.kind != smart_policy::Kind::Hold;
 	if (!command && action.reason == smart_policy::Reason::None)
 		return true;
@@ -522,10 +571,10 @@ void FANCONTROL::LogCpuMsr() {
 	this->LastCpuMsrLog=now;
 	int t=0;
 	const bool valid=this->CpuPollEpoch==this->CpuEpoch &&
-	    cpu_msr::shadow_temperature(this->CpuMsrFrame,now,this->MaxTemp,t);
+	    cpu_msr::shadow_temperature(this->CpuMsrFrame,now,this->QualifiedThermalActive?this->ControlEcMax:this->MaxTemp,t);
 	char msg[160];
 	sprintf_s(msg,sizeof(msg),"CPU MSR: valid=%d package=%d hottest=%d EC=%d selected=%d power_valid=%d watts=%.2f",
-	    valid?1:0,this->CpuMsrFrame.package,this->CpuMsrFrame.hottest,this->MaxTemp,t,
+	    valid?1:0,this->CpuMsrFrame.package,this->CpuMsrFrame.hottest,this->QualifiedThermalActive?this->ControlEcMax:this->MaxTemp,t,
 	    this->CpuMsrFrame.power_valid?1:0,this->CpuMsrFrame.watts);
 	this->Trace(msg);
 }
@@ -929,6 +978,7 @@ void FANCONTROL::ObserveEcTempGate(bool poll_ok) {
 }
 
 bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
+	this->EcSlots = ec_temp::SlotPair{};
 	this->EcTachFrame = ec_tach::Frame{};
 	this->EcTachReport = this->SingleFan && !this->UseTWR && this->EcTelemetryWaitMs >= 0;
 	this->EcTempFrame = ec_temp::Frame{};
@@ -957,8 +1007,11 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 		// Bound deliberate waits to the first pair; retries observe only.
 		this->EcAuditWaitMs = audit ? (i == 0 ? this->EcTelemetryWaitMs : 0) : -1;
 		for (auto& v : this->EcReadReady) v = -1;
+        for (auto& v : this->EcExtraReady) v = -1;
 		const bool okSample1 = this->ReadEcRaw(&sample1);
 		const int r1[3] = {this->EcReadReady[0],this->EcReadReady[1],this->EcReadReady[2]};
+        int extra1[12]; memcpy(extra1,this->EcExtraReady,sizeof(extra1));
+        for (auto& v : this->EcExtraReady) v = -1;
 		for (auto& v : this->EcReadReady) v = -1;
 		const bool okSample2 = this->ReadEcRaw(&sample2);
 		const int r2[3] = {this->EcReadReady[0],this->EcReadReady[1],this->EcReadReady[2]};
@@ -969,6 +1022,10 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 			this->FreeECAccess();
 			if (audit) {
 				const auto now = GetTickCount64();
+                this->EcSlots.begin=start; this->EcSlots.end=now;
+                for(unsigned k=0;k<12;++k) this->EcSlots.slots[k]={
+                    static_cast<unsigned char>(sample1.Sensors[k]),static_cast<unsigned char>(sample2.Sensors[k]),
+                    k?extra1[k]:r1[2],k?this->EcExtraReady[k]:r2[2]};
 				// Keep both observed words, without claiming either is the
 				// true RPM. Log bounded samples of missing readiness and
 				// immediate suspect values, without extra EC transactions.
