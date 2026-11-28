@@ -639,3 +639,12 @@ def test_full_poll_replay(tmp_path):
     # Missing sequence breaks the simulated dwell even if timestamps are close.
     out=run([row(i,i*1000) for i in range(1,13)]+[row(14,13000)])
     assert out[-1][10:]==["none","-1"]
+
+
+def test_bounded_single_tach(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "bounded-tach"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tests/bounded_tach_test.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)

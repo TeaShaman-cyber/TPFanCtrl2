@@ -5,12 +5,15 @@
 #include "cpu_msr.h"
 #include "ec_temp_quality.h"
 #include "ec_tach_quality.h"
+#include "bounded_tach_gate.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
 using namespace smart_policy;
 int main(int argc,char** argv){
-    if(argc!=3)return 2;
+    if(argc!=3&&argc!=4)return 2;
+    const bool bounded=argc==4 && std::string(argv[3])=="bounded";
+    if(argc==4&&!bounded)return 2;
     Config cfg{};
     if(!parse_shadow_config(argv[1],cfg))return 2;
     int seed; char extra;
@@ -18,6 +21,7 @@ int main(int argc,char** argv){
     if(!(initial>>seed)||initial>>extra||
        (seed!=128&&(seed<cfg.calibration.front().level||seed>cfg.calibration.back().level)))return 2;
     Policy base(cfg), gated(cfg);
+    research::BoundedTachGate guard;
     int bl=seed,gl=seed;
     uint64_t previous=0,prev_seq=0,prev_epoch=0;
     std::string line;
@@ -32,7 +36,7 @@ int main(int argc,char** argv){
              >>cpu_valid>>cpu_time>>pkg>>hot>>cmd>>post>>pending)||s>>extra||
              seq<=prev_seq||now<=previous)return 2;
         const bool discontinuity=prev_seq&&(seq!=prev_seq+1||epoch!=prev_epoch);
-        if(discontinuity){base.reset();gated.reset();}
+        if(discontinuity){base.reset();gated.reset();guard.reset();}
         previous=now;prev_seq=seq;prev_epoch=epoch;
         const bool current=epoch==poll_epoch;
         const bool timing=ok==1&&ordered==1&&dispatch<=begin&&end<=handler&&handler<=now;
@@ -41,10 +45,12 @@ int main(int argc,char** argv){
         cpu_msr::Frame c{};c.valid=cpu_valid==1;c.time_ms=cpu_time;c.package=pkg;c.hottest=hot;
         int temp=0;
         const bool valid=ok==1&&current&&cpu_msr::shadow_temperature(c,now,ec,temp);
-        const bool permit=valid&&t.allow_decrease&&r.quality==ec_tach::Quality::Dual&&r.value>0;
+        const bool strict=valid&&t.allow_decrease&&r.quality==ec_tach::Quality::Dual&&r.value>0;
+        const bool relaxed=guard.observe(seq,now,epoch,valid&&t.allow_decrease,true,r,gl);
+        const bool permit=bounded?relaxed:strict;
         const auto x=base.evaluate({now,double(temp),bl,true,valid,true});
-        const auto y=gated.evaluate({now,double(temp),gl,true,valid,true},permit);
-        if(!permit&&y.kind==Kind::Level&&(gl==128||y.level<gl))return 3;
+        const auto y=gated.evaluate({now,double(temp),gl,true,valid,true},permit,strict);
+        if(!strict&&y.kind==Kind::Level&&(gl==128||y.level<gl))return 3;
         std::cout<<seq<<','<<now<<','<<temp<<','<<valid<<','<<ec_tach::name(r.quality)<<','<<permit
                  <<','<<bl<<','<<reason_name(x.reason)<<','<<x.level
                  <<','<<gl<<','<<reason_name(y.reason)<<','<<y.level<<'\n';

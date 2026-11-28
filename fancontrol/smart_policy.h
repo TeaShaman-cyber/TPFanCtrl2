@@ -122,7 +122,7 @@ public:
 		recovering_ = false;
 	}
 	unsigned long long last_gap() const { return last_gap_; }
-	Action evaluate(const Sample& s, bool allow_decrease = true) {
+	Action evaluate(const Sample& s, bool allow_decrease = true, bool allow_fall_dispatch = true) {
 		if (!s.smart) {
 			reset();
 			return hold();
@@ -138,7 +138,7 @@ public:
 		const auto thermal_reason = !thermal_valid ? Reason::InvalidInput :
 		    s.temperature >= config_.urgent ? Reason::UrgentTemperature : Reason::None;
 		if (emergency_level_ && !fault_lost_ && (fault_ || thermal_reason != Reason::None))
-			return host_fault(s, thermal_reason, late, nonmonotonic, allow_decrease);
+			return host_fault(s, thermal_reason, late, nonmonotonic, allow_decrease, allow_fall_dispatch);
 		if (thermal_reason != Reason::None) return handback(s, thermal_reason);
 		if (nonmonotonic) return handback(s, Reason::PollDiscontinuity);
 		if (pending_ != -1) {
@@ -174,7 +174,7 @@ public:
 				since_ = s.time_ms;
 				return hold();
 			}
-			if (s.time_ms-since_ < config_.recovery_ms)
+			if (!allow_fall_dispatch || s.time_ms-since_ < config_.recovery_ms)
 				return hold();
 			const double target = target_rpm(config_, s.temperature);
 			int level = config_.calibration.back().level;
@@ -259,11 +259,12 @@ public:
 		    ? 30000ULL : (direction > 0 ? config_.rise_ms : config_.fall_ms);
 		if (s.time_ms-since_ < dwell)
 			return hold();
+		if (direction < 0 && !allow_fall_dispatch) return hold();
 		return request(s.level+direction, s.time_ms, direction > 0 ? Reason::RiseDwell : Reason::FallDwell);
 	}
 private:
 	static Action hold() { return {Kind::Hold, -1}; }
-	Action host_fault(const Sample& s, Reason thermal_reason, bool late, bool nonmonotonic, bool allow_decrease) {
+	Action host_fault(const Sample& s, Reason thermal_reason, bool late, bool nonmonotonic, bool allow_decrease, bool allow_fall_dispatch) {
 		if (!fault_) {
 			fault_ = true;
 			firmware_ = false;
@@ -301,7 +302,7 @@ private:
 			since_ = s.time_ms;
 			return hold();
 		}
-		if (s.time_ms-since_ < config_.recovery_ms) return hold();
+		if (!allow_fall_dispatch || s.time_ms-since_ < config_.recovery_ms) return hold();
 		fault_ = false;
 		recovering_ = false;
 		direction_ = 0;
