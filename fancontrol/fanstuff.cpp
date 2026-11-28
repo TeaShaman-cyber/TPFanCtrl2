@@ -909,6 +909,22 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 					    hi1,lo1,t1,r1[0],r1[1],r1[2],hi2,lo2,t2,r2[0],r2[1],r2[2],i+1,
 					    static_cast<unsigned long long>(locked-start),static_cast<unsigned long long>(now-start));
 					this->Trace(msg);
+					// Shadow only: preserve the existing control sample. Never
+					// interpret offset-adjusted bytes as raw EC temperatures.
+					if (!this->ShowBiasedTemps || this->SensorOffset[0].offs == 0) {
+						const bool a = r1[2] == 1 && t1 > 0 && t1 < 128;
+						const bool b = r2[2] == 1 && t2 > 0 && t2 < 128;
+						// Keep a hotter valid observation rather than masking it.
+						const bool useA = a && (!b || t1 > t2);
+						const int value = useA ? static_cast<int>(t1) :
+						    b ? static_cast<int>(t2) : -1;
+						sprintf_s(msg, sizeof(msg),
+						    "EcTempShadow tick=%llu value=%d source=%s quality=%s",
+						    static_cast<unsigned long long>(now), value,
+						    useA ? "A" : b ? "B" : "none",
+						    a && b ? "dual" : a || b ? "single" : "unknown");
+						this->Trace(msg);
+					}
 					this->LastEcAuditLog = now;
 				}
 			}
