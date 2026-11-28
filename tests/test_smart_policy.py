@@ -441,3 +441,67 @@ int main(){
     dispatch = (root / "fancontrol/fancontrol.cpp").read_text(encoding="utf-8-sig")
     assert "joined = ::WaitForSingleObject(this->hThread, INFINITE) == WAIT_OBJECT_0;" in dispatch
     assert "if (joined && !g_clientMode) this->ObserveEcTempGate(ok != 0);" in dispatch
+
+
+def test_ec_tach_quality(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    exe = tmp_path / "ec-tach-quality"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                    "-I", str(root / "fancontrol"), str(root / "tests/ec_tach_quality_test.cpp"),
+                    "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+
+
+def test_ec_tach_quality_observer(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "fancontrol/fanstuff.cpp").read_text(encoding="utf-8-sig")
+    start = source.index("void FANCONTROL::ObserveEcTachQuality(")
+    end = source.index("void FANCONTROL::ObserveEcTempGate(", start)
+    code = r'''
+#include "ec_tach_quality.h"
+#include "smart_live.h"
+#include <cassert>
+#include <cstdio>
+#include <string>
+#define sprintf_s std::snprintf
+uint64_t tick=2000;
+uint64_t GetTickCount64(){return tick;}
+struct FANCONTROL {
+    bool EcTachReport=true, isPowerSuspendState=false, restorePending=false;
+    ec_tach::Frame EcTachFrame{1000,1700,{2510,1,1},{12496,1,0}};
+    smart_policy::PollTiming SmartPoll{900,950,1750,1800,1900};
+    uint64_t CpuPollEpoch=1,CpuEpoch=1;
+    std::string msg;
+    void Trace(const char* s){msg=s;}
+    void ObserveEcTachQuality(bool);
+};
+''' + source[start:end] + r'''
+int main(){
+    FANCONTROL a; a.ObserveEcTachQuality(true);
+    assert(a.msg.find("rpm=2510 delta=-1 source=A quality=single age=1000 epoch=1")!=std::string::npos);
+    assert(!a.EcTachReport);
+    a.msg.clear();a.ObserveEcTachQuality(true);assert(a.msg.empty());
+    FANCONTROL b; ++b.CpuEpoch;b.ObserveEcTachQuality(true);
+    assert(b.msg.find("rpm=-1 delta=-1 source=- quality=stale")!=std::string::npos);
+    FANCONTROL c;c.SmartPoll.dispatch=0;c.ObserveEcTachQuality(true);
+    assert(c.msg.find("quality=stale")!=std::string::npos);
+    FANCONTROL d;d.SmartPoll.worker=1001;d.ObserveEcTachQuality(true);
+    assert(d.msg.find("quality=stale")!=std::string::npos);
+    FANCONTROL e;e.ObserveEcTachQuality(false);
+    assert(e.msg.find("quality=stale")!=std::string::npos);
+    FANCONTROL f;f.restorePending=true;f.ObserveEcTachQuality(true);
+    assert(f.msg.find("quality=stale")!=std::string::npos);
+    FANCONTROL g;g.EcTachFrame={};g.ObserveEcTachQuality(false);
+    assert(g.msg.find("rpm=-1 delta=-1 source=- quality=stale age=0")!=std::string::npos);
+    FANCONTROL h;tick=3001;h.ObserveEcTachQuality(true);
+    assert(h.msg.find("quality=stale age=2001")!=std::string::npos);
+}
+'''
+    cpp = tmp_path / "tach_observer.cpp"
+    cpp.write_text(code)
+    exe = tmp_path / "tach_observer"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                    "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)
+    dispatch = (root / "fancontrol/fancontrol.cpp").read_text(encoding="utf-8-sig")
+    assert "if (joined && !g_clientMode) this->ObserveEcTachQuality(ok != 0);" in dispatch

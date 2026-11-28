@@ -10,6 +10,7 @@ def test_ec_pair_audit(tmp_path):
     end = src.index("bool FANCONTROL::ReadEcRaw(", start)
     code = r"""
 #include "ec_temp_quality.h"
+#include "ec_tach_quality.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -28,6 +29,8 @@ struct FANCONTROL {
     struct {int offs=0;} SensorOffset[12];
     ec_temp::Frame EcTempFrame{};
     bool EcTempReport=false;
+    ec_tach::Frame EcTachFrame{};
+    bool EcTachReport=false;
     int reads=0, scenario=0;
     std::vector<int> budgets;
     std::string trace;
@@ -62,6 +65,10 @@ int main(){
     assert(f.trace.find("a=d4d4/9 obf=1,0,0 b=09d4/48 obf=1,1,1")!=std::string::npos);
     assert(f.trace.find("tries=1 lock=17 ms=217")!=std::string::npos);
     assert(f.budgets==std::vector<int>({30,30}));
+    assert(f.EcTachReport && f.EcTachFrame.begin==1000 && f.EcTachFrame.end==1217);
+    assert(f.EcTachFrame.a.rpm==0xd4d4 && f.EcTachFrame.b.rpm==0x09d4);
+    assert(f.EcTachFrame.a.low_ready==1 && f.EcTachFrame.a.high_ready==0);
+    assert(f.EcTachFrame.b.low_ready==1 && f.EcTachFrame.b.high_ready==1);
     assert(f.EcTempReport && f.EcTempFrame.begin==1000 && f.EcTempFrame.end==1217);
     assert(f.EcTempFrame.a==9 && f.EcTempFrame.b==48 && f.EcTempFrame.ready_a==0 && f.EcTempFrame.ready_b==1);
     assert(f.trace.find("EcTempShadow tick=1217 value=48 source=B quality=single")!=std::string::npos);
@@ -80,7 +87,7 @@ int main(){
         FANCONTROL q; q.scenario=i+3; q.ShowBiasedTemps=(i==7); q.SensorOffset[0].offs=(i==7?20:0);
         assert(q.ReadEcStatus(&s)&&q.reads==2&&!q.locked);
         assert((unsigned char)s.Sensors[0]==legacy[i]); // never change control input
-        if(i==7) assert(q.trace.find("EcTempShadow")==std::string::npos);
+        if(i==7) {assert(q.trace.find("EcTempShadow")==std::string::npos); assert(q.EcTachReport);}
         else assert(q.trace.find(expected[i])!=std::string::npos);
     }
     FANCONTROL zeroOffset; zeroOffset.ShowBiasedTemps=true;
@@ -97,9 +104,11 @@ int main(){
     assert(dual.ReadEcStatus(&s)&&dual.trace.empty()&&dual.budgets==std::vector<int>({-1,-1}));
     FANCONTROL fail;fail.scenario=2;
     assert(!fail.ReadEcStatus(&s)&&fail.reads==20&&!fail.locked&&fail.EcAuditWaitMs==-1);
+    assert(fail.EcTachReport && fail.EcTachFrame.begin==0);
     assert(fail.EcTempReport && fail.EcTempFrame.begin==0);
     f.scenario=2; assert(!f.ReadEcStatus(&s) && f.EcTempFrame.begin==0);
     assert(!disabled.EcTempReport && !dual.EcTempReport);
+    assert(!disabled.EcTachReport && !dual.EcTachReport && f.EcTachFrame.begin==0);
     assert(fail.budgets[0]==30&&fail.budgets[1]==30);
     for(unsigned i=2;i<fail.budgets.size();i++)assert(fail.budgets[i]==0);
 }

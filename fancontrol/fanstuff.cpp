@@ -855,6 +855,26 @@ void FANCONTROL::FreeECAccess() {
 //  read fan and temperatures from embedded controller
 //-------------------------------------------------------------------------
 // Diagnostic only: never call SetFan or change the existing control input.
+void FANCONTROL::ObserveEcTachQuality(bool poll_ok) {
+    if (!this->EcTachReport) return;
+    this->EcTachReport = false;
+    const auto now = GetTickCount64();
+    const auto& f = this->EcTachFrame;
+    const bool epoch = this->CpuPollEpoch == this->CpuEpoch &&
+        !this->isPowerSuspendState && !this->restorePending;
+    const bool ordered = this->SmartPoll.ordered(0, now) &&
+        this->SmartPoll.worker <= f.begin && f.end <= this->SmartPoll.ec_done;
+    const auto q = ec_tach::assess(f, now, epoch, poll_ok && ordered, 2000);
+    char msg[160];
+    // EcPair prefix keeps this in the existing diagnostic archive allowlist.
+    sprintf_s(msg, sizeof(msg),
+        "EcPair tach tick=%llu pair=%llu rpm=%d delta=%d source=%c quality=%s age=%llu epoch=%d",
+        static_cast<unsigned long long>(now), static_cast<unsigned long long>(f.end),
+        q.value, q.delta, q.source, ec_tach::name(q.quality),
+        static_cast<unsigned long long>(f.begin && now >= f.begin ? now-f.begin : 0), epoch ? 1 : 0);
+    this->Trace(msg);
+}
+
 void FANCONTROL::ObserveEcTempGate(bool poll_ok) {
     if (!this->EcTempReport) return;
     this->EcTempReport = false;
@@ -877,6 +897,8 @@ void FANCONTROL::ObserveEcTempGate(bool poll_ok) {
 }
 
 bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
+	this->EcTachFrame = ec_tach::Frame{};
+	this->EcTachReport = this->SingleFan && !this->UseTWR && this->EcTelemetryWaitMs >= 0;
 	this->EcTempFrame = ec_temp::Frame{};
 	this->EcTempReport = this->SingleFan && !this->UseTWR && this->EcTelemetryWaitMs >= 0 &&
 	    (!this->ShowBiasedTemps || this->SensorOffset[0].offs == 0);
@@ -926,6 +948,9 @@ bool FANCONTROL::ReadEcStatus(FCSTATE* pfcstate) {
 				const unsigned t2 = static_cast<unsigned char>(sample2.Sensors[0]);
 				const bool suspect = (hi1<<8|lo1)>0x1fff || (hi2<<8|lo2)>0x1fff ||
 				    t1==hi1 || t2==hi2;
+				this->EcTachFrame = {start, now, {hi1<<8|lo1,r1[0],r1[1]}, {hi2<<8|lo2,r2[0],r2[1]}};
+				// Keep the existing bounded audit cadence and raw pair correlation.
+				this->EcTachReport = suspect || !this->LastEcAuditLog || now-this->LastEcAuditLog >= 10000;
 				const bool rawTemp = this->EcTempReport;
 				if (rawTemp) this->EcTempFrame = {start, now, t1, t2, r1[2], r2[2]};
 				this->EcTempReport = rawTemp && (suspect || !this->LastEcAuditLog || now-this->LastEcAuditLog >= 10000);

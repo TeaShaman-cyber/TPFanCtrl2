@@ -30,6 +30,7 @@
 #include "smart_shadow.h"
 #include "smart_live.h"
 #include "ec_temp_quality.h"
+#include "ec_tach_quality.h"
 #include "cpu_msr_win.h"
 #include "nvme_monitor.h"
 
@@ -121,6 +122,8 @@ protected:
 	unsigned long long LastEcAuditLog = 0;
 	ec_temp::Frame EcTempFrame{}; // worker publishes, joined dialog consumes
 	bool EcTempReport = false;
+	ec_tach::Frame EcTachFrame{};
+	bool EcTachReport = false;
 	bool FanCommandPending = false;
 	int PowerSuspendMode;
 	int LidSmartLevel;  // 1 or 2 runs that smart profile while the lid is closed, 0 off
@@ -279,6 +282,7 @@ protected:
 	void NvmeTitle(const char* base, char* result, size_t size) const;
 	void ObserveSmartShadow();
 	void ObserveEcTempGate(bool poll_ok);
+	void ObserveEcTachQuality(bool poll_ok);
 	void SmartControl();
 
 	bool FanSpunUp();

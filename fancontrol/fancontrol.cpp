@@ -1353,6 +1353,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 	this->DrainTrace();
 	ULONG ok = mp1;  // equivalent of "ok = this->ReadEcStatus(&this->State);" via thread
 	if (joined && !g_clientMode) this->ObserveEcTempGate(ok != 0);
+	if (joined && !g_clientMode) this->ObserveEcTachQuality(ok != 0);
 
 	if (ok) {
 		this->ReadErrorCount = 0;
