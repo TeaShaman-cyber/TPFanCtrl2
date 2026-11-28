@@ -34,7 +34,7 @@ constexpr auto TP_ECVALUE_SELFAN2	  = (char)0x0001;
 //-------------------------------------------------------------------------
 //  switch fan according to settings
 //-------------------------------------------------------------------------
-bool FANCONTROL::HandleData(void) {
+bool FANCONTROL::HandleData(bool joined) {
 	char obuf[256] = "",
 		 obuf2[128] = "",
 		 templist[256] = "",
@@ -322,6 +322,12 @@ bool FANCONTROL::HandleData(void) {
 		this->SmartLive.reset();
 	}
 	this->LogCpuMsr();
+    // Capture the pre-command state; append the diagnostic only afterwards.
+    const auto jointNow = GetTickCount64();
+    const int jointMode = this->CurrentMode;
+    const int jointLevel = static_cast<unsigned char>(this->State.FanCtrl);
+    const bool jointAck = !this->FanCommandPending;
+    const int jointMax = this->MaxTemp;
 
 	switch (this->CurrentMode) {
 
@@ -409,6 +415,7 @@ bool FANCONTROL::HandleData(void) {
 		break;
 	}
 
+	if (joined) this->LogJointPoll(true, jointNow, jointMode, jointLevel, jointAck, jointMax, ok != 0);
 	this->PreviousMode = this->CurrentMode;
 
 	if (this->CurrentMode == 3 && this->MaxTemp > this->ManModeExitInternal)
@@ -855,6 +862,31 @@ void FANCONTROL::FreeECAccess() {
 //  read fan and temperatures from embedded controller
 //-------------------------------------------------------------------------
 // Diagnostic only: never call SetFan or change the existing control input.
+void FANCONTROL::LogJointPoll(bool poll_ok, uint64_t now, int mode, int level, bool ack, int ec_max, bool command_ok) {
+    if (g_clientMode || !this->SingleFan || this->UseTWR || this->EcTelemetryWaitMs < 0 || this->Log2File != 1) return;
+    const auto t = poll_ok ? this->EcTempFrame : ec_temp::Frame{0,0,0,0,-1,-1};
+    const auto r = poll_ok ? this->EcTachFrame : ec_tach::Frame{0,0,{0,-1,-1},{0,-1,-1}};
+    const auto c = poll_ok ? this->CpuMsrFrame : cpu_msr::Frame{};
+    const bool ordered = poll_ok && this->SmartPoll.ordered(0,now) &&
+        this->SmartPoll.worker <= r.begin && r.end <= this->SmartPoll.ec_done &&
+        r.begin != 0 && r.begin <= r.end && !this->isPowerSuspendState && !this->restorePending;
+    const bool tempAligned = t.begin == r.begin && t.end == r.end && t.begin != 0;
+    char line[512];
+    sprintf_s(line,sizeof(line),
+        "EcPair full %llu,%d,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%d,%d,%d,%d,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%d,%llu,%d,%d,%d,%d,%d",
+        static_cast<unsigned long long>(this->JointPollSeq),poll_ok?1:0,
+        static_cast<unsigned long long>(this->SmartPoll.dispatch),
+        static_cast<unsigned long long>(r.begin),static_cast<unsigned long long>(r.end),
+        static_cast<unsigned long long>(this->SmartPoll.handler),static_cast<unsigned long long>(now),
+        static_cast<unsigned long long>(this->CpuEpoch),static_cast<unsigned long long>(this->CpuPollEpoch),
+        ordered?1:0,mode,level,ack?1:0,ec_max,
+        t.a,tempAligned?t.ready_a:-1,t.b,tempAligned?t.ready_b:-1,
+        r.a.rpm,r.a.low_ready,r.a.high_ready,r.b.rpm,r.b.low_ready,r.b.high_ready,
+        c.valid?1:0,static_cast<unsigned long long>(c.time_ms),c.package,c.hottest,
+        command_ok?1:0,static_cast<unsigned char>(this->State.FanCtrl),this->FanCommandPending?1:0);
+    this->WriteJointPoll(line);
+}
+
 void FANCONTROL::ObserveEcTachQuality(bool poll_ok) {
     if (!this->EcTachReport) return;
     this->EcTachReport = false;

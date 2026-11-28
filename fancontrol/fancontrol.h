@@ -124,6 +124,7 @@ protected:
 	bool EcTempReport = false;
 	ec_tach::Frame EcTachFrame{};
 	bool EcTachReport = false;
+	uint64_t JointPollSeq = 0;
 	bool FanCommandPending = false;
 	int PowerSuspendMode;
 	int LidSmartLevel;  // 1 or 2 runs that smart profile while the lid is closed, 0 off
@@ -259,7 +260,7 @@ protected:
 	bool ReadEcRaw(FCSTATE* pfcstate);
 	bool SelectFan(char fan);
 
-	bool HandleData();
+	bool HandleData(bool joined);
 
 	smart_policy::Shadow SmartShadow;
 	smart_policy::Live SmartLive;
@@ -283,6 +284,8 @@ protected:
 	void ObserveSmartShadow();
 	void ObserveEcTempGate(bool poll_ok);
 	void ObserveEcTachQuality(bool poll_ok);
+	void LogJointPoll(bool poll_ok, uint64_t now, int mode, int level, bool ack, int ec_max, bool command_ok);
+	void WriteJointPoll(const char* record);
 	void SmartControl();
 
 	bool FanSpunUp();

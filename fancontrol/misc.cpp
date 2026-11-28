@@ -915,6 +915,17 @@ FANCONTROL::Trace(const char* text) {
 		this->DrainTrace();
 }
 
+// Research file-only path: no IPC ring or synchronous GUI updates.
+void FANCONTROL::WriteJointPoll(const char* record) {
+    char datebuf[128] = "";
+    this->CurrentDateTimeLocalized(datebuf,sizeof(datebuf));
+    FILE* out = nullptr;
+    if (!fopen_s(&out,"TPFanControl.log","ab")) {
+        fprintf(out,"[%s] %s\r\n",datebuf,record);
+        fclose(out);
+    }
+}
+
 void FANCONTROL::DrainTrace() {
 	if (::GetCurrentThreadId() != TraceOwnerThread || !hwndDialog)
 		return;

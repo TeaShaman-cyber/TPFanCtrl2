@@ -761,6 +761,7 @@ ULONG FANCONTROL::DlgProc(HWND hwnd, ULONG msg, WPARAM mp1, LPARAM mp2) {
 			this->CpuPollEpoch = this->CpuEpoch;
 			this->SmartPoll = smart_policy::PollTiming{};
 			this->SmartPoll.dispatch = GetTickCount64();
+			++this->JointPollSeq;
 			this->hThread = this->CreateThread(FANCONTROL_Thread, this);
 		}
 		break;
@@ -1357,7 +1358,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 
 	if (ok) {
 		this->ReadErrorCount = 0;
-		this->HandleData();
+		this->HandleData(joined);
 
 		if (this->restorePending) {
 			int recoveryTemp=0;
@@ -1419,6 +1420,7 @@ ULONG FANCONTROL::OnNewData(WPARAM mp1) {
 				::SendMessage(this->hwndDialog, WM_ENDSESSION, 0, 0);
 			}
 		}
+		if (joined && !g_clientMode) this->LogJointPoll(false, this->SmartPoll.handler, -1, -1, false, -1, false);
 	}
 
 	return 0;

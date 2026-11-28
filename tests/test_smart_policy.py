@@ -344,20 +344,26 @@ struct Controller {
     void Trace(const char*){}
     void ModeToDialog(int m){mode=m;}
     bool SetFan(const char*,int level){assert(level==128);++writes;FanCommandPending=!success;return success;}
-    void fail(){bool ok=false; if(false){} else {this->SmartShadow.reset();
+    int records=0;
+    struct {unsigned long long handler=123;} SmartPoll;
+    void LogJointPoll(bool good,unsigned long long now,int mode,int level,bool ack,int ec,bool cmd){
+        assert(!good && now==123 && mode==-1 && level==-1 && !ack && ec==-1 && !cmd);
+        ++records;
+    }
+    void fail(){bool ok=false; bool joined=true; if(false){} else {this->SmartShadow.reset();
 '''
     main = r'''
     }
 };
 int main(){
- Controller a; a.fail(); assert(a.writes==1 && a.mode==1);
+ Controller a; a.fail(); assert(a.writes==1 && a.mode==1 && a.records==1);
  Controller b; b.success=false; b.fail(); assert(b.writes==1 && b.FanCommandPending);
  b.CurrentMode=1; b.success=true; b.fail(); assert(b.writes==2 && !b.FanCommandPending);
  Controller c; c.CurrentMode=3; c.fail(); assert(c.writes==0);
  Controller d; d.SmartLive.on=false; d.fail(); assert(d.writes==0);
  Controller e; e.isPowerSuspendState=true; e.fail(); assert(e.writes==0);
  Controller f; f.restorePending=true; f.fail(); assert(f.writes==0);
- Controller g; g_clientMode=true; g.fail(); assert(g.writes==0);
+ Controller g; g_clientMode=true; g.fail(); assert(g.writes==0 && g.records==0);
 }
 '''
     code=tmp_path/"read-failure.cpp"
@@ -552,3 +558,51 @@ def test_joint_feedback_replay_faults(tmp_path):
     # Actual high temperature remains an urgent handback even without tach.
     out=run([row(1000, ta=85,tb=85,ar=0,br=0)])
     assert out[0][11:] == ["urgent_temperature","128"]
+
+
+def test_full_poll_record(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "fancontrol/fanstuff.cpp").read_text(encoding="utf-8-sig")
+    start = src.index("void FANCONTROL::LogJointPoll(")
+    end = src.index("void FANCONTROL::ObserveEcTachQuality(", start)
+    code = r'''
+#include "ec_temp_quality.h"
+#include "ec_tach_quality.h"
+#include "smart_live.h"
+#include <cassert>
+#include <cstdio>
+#include <string>
+#define sprintf_s std::snprintf
+bool g_clientMode=false;
+struct FANCONTROL {
+    bool SingleFan=true,UseTWR=false,isPowerSuspendState=false,restorePending=false;
+    int EcTelemetryWaitMs=5,Log2File=1;
+    uint64_t JointPollSeq=1,CpuEpoch=2,CpuPollEpoch=2;
+    ec_temp::Frame EcTempFrame{1000,1700,70,72,1,1};
+    ec_tach::Frame EcTachFrame{1000,1700,{2510,1,1},{12496,1,0}};
+    smart_policy::PollTiming SmartPoll{900,950,1750,1800,1900};
+    cpu_msr::Frame CpuMsrFrame{};
+    struct {char FanCtrl=1;} State;
+    bool FanCommandPending=false;
+    std::string line;
+    void WriteJointPoll(const char* s){line=s;}
+    void LogJointPoll(bool,uint64_t,int,int,bool,int,bool);
+};
+''' + src[start:end] + r'''
+int main(){
+    FANCONTROL f; f.CpuMsrFrame.valid=true;f.CpuMsrFrame.time_ms=1800;
+    f.CpuMsrFrame.package=74;f.CpuMsrFrame.hottest=76;
+    f.LogJointPoll(true,2000,3,1,true,72,true);
+    assert(f.line=="EcPair full 1,1,900,1000,1700,1900,2000,2,2,1,3,1,1,72,70,1,72,1,2510,1,1,12496,1,0,1,1800,74,76,1,1,0");
+    f.LogJointPoll(false,2000,-1,-1,false,-1,false);
+    assert(f.line.find("EcPair full 1,0,900,0,0,1900,2000,2,2,0,-1,-1,0,-1,0,-1,0,-1,0,-1,-1,0,-1,-1,0,0,0,0,0,1,0")==0);
+    f.line.clear();f.EcTelemetryWaitMs=-1;f.LogJointPoll(true,2000,3,1,true,72,true);assert(f.line.empty());
+    f.EcTelemetryWaitMs=5;g_clientMode=true;f.LogJointPoll(true,2000,3,1,true,72,true);assert(f.line.empty());
+}
+'''
+    cpp = tmp_path / "full_poll.cpp"
+    cpp.write_text(code)
+    exe = tmp_path / "full_poll"
+    subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                    "-I", str(root / "fancontrol"), str(cpp), "-o", str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)

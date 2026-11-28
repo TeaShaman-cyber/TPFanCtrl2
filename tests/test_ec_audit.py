@@ -45,12 +45,17 @@ struct FANCONTROL {
         p->Fan1SpeedLo=char(0xd4);p->Fan1SpeedHi=char(reads%2?0xd4:9);
         p->Sensors[0]=char(reads%2?9:48);
         if(EcAuditWaitMs>=0){EcReadReady[0]=1;EcReadReady[1]=reads%2?0:1;EcReadReady[2]=reads%2?0:1;}
-        if(scenario>=3){
+        if(scenario>=3 && scenario<=10){
             const bool a=reads%2!=0;
             const int t[][4]={{72,9,1,0},{9,72,0,1},{9,10,0,0},{128,128,1,1},{105,68,1,1},{0,127,1,1},{72,9,-1,0},{72,9,1,0}};
             const auto& row=t[scenario-3];
             p->Sensors[0]=char(row[a?0:1]);
             EcReadReady[2]=row[a?2:3];
+        }
+        if(scenario==11){
+            p->Fan1SpeedHi=9;
+            p->Sensors[0]=65;
+            EcReadReady[0]=EcReadReady[1]=EcReadReady[2]=1;
         }
         return scenario!=2;
     }
@@ -93,6 +98,13 @@ int main(){
     FANCONTROL zeroOffset; zeroOffset.ShowBiasedTemps=true;
     assert(zeroOffset.ReadEcStatus(&s));
     assert(zeroOffset.trace.find("value=48 source=B quality=single")!=std::string::npos);
+    FANCONTROL sparse;
+    sparse.LastEcAuditLog=GetTickCount64();
+    // Even when the sparse observer suppresses a line, keep the raw frame.
+    sparse.scenario=11;
+    assert(sparse.ReadEcStatus(&s));
+    assert(!sparse.EcTempReport && !sparse.EcTachReport);
+    assert(sparse.EcTachFrame.begin>0 && sparse.EcTempFrame.a==65 && sparse.EcTempFrame.ready_b==1);
     FANCONTROL retry;retry.scenario=1;
     assert(retry.ReadEcStatus(&s) && retry.reads==4 && !retry.locked);
     assert(retry.budgets==std::vector<int>({30,30,0,0}));
